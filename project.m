@@ -1,6 +1,7 @@
 style_image = imread("pontillism.jpg");
 base_image = imread("cat.jpg");
 
+% step 1: split and match
 min_width = 8^2;
 max_width = 256^2;
 omega = 15;
@@ -76,6 +77,11 @@ end
 % at this point you have patches (R in paper) and candidateLabels (L in
 % paper) to work with for the rest of the steps
 
+% step 2: optimization
+
+% step 3: bilinear blending
+
+% step 4: global color and contrast matching
 
 
 
@@ -83,6 +89,7 @@ end
 
 
 % ------------------- functions go below here -----------------------------
+
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
 function ds, newPatches = computeArg(patch, index, style_image)
@@ -99,6 +106,7 @@ function ds, newPatches = computeArg(patch, index, style_image)
     end
 end
 
+% used to check the spatial constraint when calculating k-NN
 function good = knnSpatialConstraint(center1, center2, width)
     good = abs(center1 - center2) > width/2
 end
