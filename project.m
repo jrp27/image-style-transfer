@@ -26,8 +26,7 @@ while not(done)
      patch = regions(index, PATCH_INDEX);
      width = regions(index, WIDTH_INDEX);
      % x_i <- center of R_i
-     center = size(patch, 1)/2 + offsets(index, 1), size(patch, 2)/2 + offsets(index, 2);
-     centers = [centers, center];
+     center = [regions(index, X_CENTER_INDEX), regions(index, Y_CENTER_INDEX)];
      % sigma_i <- sqrt(var(p^u_xi))
      sigma_i = sqrt(var(patch));
      
@@ -41,15 +40,40 @@ while not(done)
      if (sigma_i + minD > omega && width > min_width) || width > max_width
          newWidth = width/2;
          % Split R_i into four
-         newPatch1 = base_image(offset(index,1):offset(index,1)+width/2, offset(index,2):offset(index,2)+width/2, :);
-         newPatch2 = base_image(offset(index,1)+width/2:offset(index,1)+width, offset(index,2):offset(index,2)+width/2, :);
-         newPatch3 = base_image(offset(index,1):offset(index,1)+width/2, offset(index,2)+width/2:offset(index,2)+width, :);
-         newPatch4 = base_image(offset(index,1)+width/2:offset(index,1)+width, offset(index,2)+width/2:offset(index,2)+width, :);
-         
          % R = {R \ R_i} U {R_m+1, ..., R_m+4}
-         patches = patches(patches~=patch);
-         patches = [patches, newPatch1, newPatch2, newPatch3, newPatch4];
-         widths = [widths, width/2, width/2, width/2, width/2];
+         removeCondition = regions(:, 1)==patch;
+         regions(removeCondition) = [];
+         
+         newPatch1 = base_image(regions(index,X_OFFSET_INDEX):regions(index,X_OFFSET_INDEX)+width/2, regions(index,Y_OFFSET_INDEX):regions(index,Y_OFFSET_INDEX)+width/2, :);
+         newWidth = width/2;
+         newXOffset1 = regions(index, X_OFFSET_INDEX);
+         newYOffset1 = regions(index, Y_OFFSET_INDEX);
+         newXCenter1 = newXOffset1 + newWidth/2;
+         newYCenter1 = newYOffset1 + newWidth/2;
+         newRegion1 = [newPatch1, newXOffset1, newYOffset1, newXCenter1, newYCenter1, newWidth];
+         
+         newPatch2 = base_image(regions(index,X_OFFSET_INDEX)+width/2:regions(index,X_OFFSET_INDEX)+width, regions(index,Y_OFFSET_INDEX):regions(index,Y_OFFSET_IMAGE)+width/2, :);
+         newXOffset2 = regions(index, X_OFFSET_INDEX) + width/2;
+         newYOffset2 = regions(index, Y_OFFSET_INDEX);
+         newXCenter2 = newXOffset2 + newWidth/2;
+         newYCenter2 = newYOffset2 + newWidth/2;
+         newRegion1 = [newPatch2, newXOffset2, newYOffset2, newXCenter2, newYCenter2, newWidth];
+         
+         newPatch3 = base_image(regions(index,X_OFFSET_INDEX):regions(index,X_OFFSET_INDEX)+width/2, regions(index,Y_OFFSET_INDEX)+width/2:regions(index,Y_OFFSET_INDEX)+width, :);
+         newXOffset3 = regions(index, X_OFFSET_INDEX);
+         newYOffset3 = regions(index, Y_OFFSET_INDEX) + width/2;
+         newXCenter3 = newXOffset3 + newWidth/2;
+         newYCenter3 = newYOffset3 + newWidth/2;
+         newRegion3 = [newPatch3, newXOffset3, newYOffset3, newXCenter3, newYCenter3, newWidth];
+         
+         newPatch4 = base_image(regions(index,X_OFFSET_INDEX)+width/2:regions(index,X_OFFSET_INDEX)+width, regions(index,Y_OFFSET_INDEX)+width/2:regions(index,Y_OFFSET_INDEX)+width, :);
+         newXOffset4 = regions(index, X_OFFSET_INDEX) + width/2;
+         newYOffset4 = regions(index, Y_OFFSET_INDEX) + width/2;
+         newXCenter4 = newXOffset4 + newWidth/2;
+         newYCenter4 = newYOffset4 + newWidth/2;
+         newRegion4 = [newPatch4, newXOffset4, newYOffset4, newXCenter4, newYCenter4, newWidth];
+         
+         regions = [regions; newRegion1; newRegion2; newRegion3; newRegion4];
      else
          % Compute spatially-constrained k-NN:
          % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
@@ -178,7 +202,7 @@ imshow(input_im);
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
 function [ds, newPatches] = computeArg(patch, index, style_image)
-    width = widths(index);
+    width = regions(index, WIDTH_INDEX);
     ds = [];
     newPatches = [];
     for i = 1:size(style_image, 1)/width
