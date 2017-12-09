@@ -1,4 +1,4 @@
-style_image = imread('pontillism.jpg');
+style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % step 1: split and match
@@ -7,11 +7,15 @@ max_width = 256^2;
 omega = 15;
 K = 4;
 
-patch1 = base_image;
-patches = [patch1];
-offsets = [1, 1];
-centers = [];
-widths = [size(base_image, 1)];
+% regions is: patch, xOffset, yOffset, xCenter, yCenter, width;
+regions = [base_image, 0, 0, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)];
+PATCH_INDEX = 1;
+X_OFFSET_INDEX = 2;
+Y_OFFSET_INDEX = 3;
+X_CENTER_INDEX = 4;
+Y_CENTER_INDEX = 5;
+WIDTH_INDEX = 6;
+
 candidateLabels = [];
 
 index = 1;
@@ -19,8 +23,8 @@ done = false;
 
 while not(done)
     % R_i
-     patch = patches(index);
-     width = widths(index);
+     patch = regions(index, PATCH_INDEX);
+     width = regions(index, WIDTH_INDEX);
      % x_i <- center of R_i
      center = size(patch, 1)/2 + offsets(index, 1), size(patch, 2)/2 + offsets(index, 2);
      centers = [centers, center];
@@ -79,7 +83,7 @@ end
 % at this point you have patches (R in paper) and candidateLabels (L in
 % paper) to work with for the rest of the steps
 
-% step 2: optimization
+%% step 2: optimization
 
 % Use ICM to remove the noise from the given image.
 % * covar is the known covariance of the Gaussian noise.
@@ -89,7 +93,7 @@ end
 %   due to the difference between two neighbouring pixel values.
 % * iterations is the number of iterations to perform.
 
-% step 3: bilinear blending
+%% step 3: bilinear blending
 
 %% step 4: global color and contrast matching
 
@@ -169,7 +173,7 @@ imshow(input_im);
 
 
 
-% ------------------- functions go below here -----------------------------
+%% ------------------- functions go below here -----------------------------
 
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
