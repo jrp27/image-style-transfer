@@ -121,7 +121,7 @@ end
 
 %% step 4: global color and contrast matching
 
-style_image = imread('pontillism.jpg');
+style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % chromatic adaptation transform
@@ -191,6 +191,21 @@ end
 imshow(input_im);
 
 % color chroma transfer
+
+%convert to hst
+hsv_im = rgb2hsv(lab2rgb(input_im));
+
+%select hues for histogram
+histogram_points = [];
+
+for i = 1:size(hsv_im, 1)
+    for j = 1:size(hsv_im, 2)
+       histogram_points = [histogram_points, hsv_im(i, j, 1);
+    end
+end
+
+h = histogram(histogram_points);            
+            
 
 
 
