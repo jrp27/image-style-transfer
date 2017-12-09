@@ -1,5 +1,5 @@
-style_image = imread("pontillism.jpg");
-base_image = imread("cat.jpg");
+style_image = imread('pontillism.jpg');
+base_image = imread('cat.jpg');
 
 % step 1: split and match
 min_width = 8^2;
@@ -81,9 +81,88 @@ end
 
 % step 2: optimization
 
+% Use ICM to remove the noise from the given image.
+% * covar is the known covariance of the Gaussian noise.
+% * max_diff is the maximum contribution to the potential
+%   of the difference between two neighbouring pixel values.
+% * weight_diff is the weighting attached to the component of the potential
+%   due to the difference between two neighbouring pixel values.
+% * iterations is the number of iterations to perform.
+
 % step 3: bilinear blending
 
-% step 4: global color and contrast matching
+%% step 4: global color and contrast matching
+
+style_image = imread('pontillism.jpg');
+base_image = imread('cat.jpg');
+
+% chromatic adaptation transform
+
+m_cat02 = [0.7328 0.4296 -0.1624; -0.7036 1.6975 0.0061; 0.0030 0.0136 0.9834];
+
+% 1.Estimate the white point (illuminant) of image E. For a given value t (we
+% set t = 0.3,  more  discussion  on  [9]),  the  white  point  of  an  
+% image  is  defined as the mean color value of all pixels such that 
+% (|a∗|+|b∗|)/L∗ < t ,
+% where a∗, b∗ and L∗ denote the pixel coordinates in the CIELAB color space.
+
+% convert to other forms
+lab_style = rgb2lab(style_image); 
+
+% TODO: should be finished texture transfer image, not base image
+lab_base = rgb2lab(base_image);
+
+whitepoint_style = computeWhitepoint(lab_style);
+
+lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
+
+% 2.  Estimate similarly the white point of image I.
+% 3.  Perform the chromatic adaptation transform (CAT) on I to adapt its 
+% white point to the white point of E.
+% 4.  Repeat Steps 2 and 3 until (a) the maximum number of iterations has 
+% been reached or; (b) the I white point has not changed from the previous 
+% iteration.
+itern_num = 0;
+max_iter = 30;
+new_whitepoint = [];
+old_whitepoint = [];
+input_im = lab_base;
+
+while iternum < max_iter
+   old_whitepoint = new_whitepoint; 
+   
+   % step 2
+   new_whitepoint = computeWhitepoint(input_im);
+   
+   lms_wp_input = m_cat02*lab2xyz(new_whitepoint);
+   
+   % step 3 
+   transform = inv(m_cat02)*diag([lms_wp_style(1)/lms_wp_input(1), ...
+       lms_wp_style(2)/lms_wp_input(2), lms_wp_style(3)/lms_wp_input(3)])...
+       *m_cat02;
+   
+   xyz_input = lab2xyz(input_im);
+   new_im = [];
+   
+   for k = 1:length(xyz_input)
+       new_im = [new_im; transform*xyz_input(k)];
+   end
+   
+   input_im = xyz2lab(new_im);
+   
+   % end conditions
+   if sum(new_whitepoint == old_whitepoint) == 3
+       break;
+   end
+   iternum = iternum + 1; 
+end    
+
+% 5.  Return image I′ which has the same geometry of I but with colors 
+% adapted to the illuminant of E.
+
+imshow(input_im);
+
+% color chroma transfer
 
 
 
@@ -94,7 +173,7 @@ end
 
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
-function ds, newPatches = computeArg(patch, index, style_image)
+function [ds, newPatches] = computeArg(patch, index, style_image)
     width = widths(index);
     ds = [];
     newPatches = [];
@@ -110,11 +189,11 @@ end
 
 % used to check the spatial constraint when calculating k-NN
 function good = knnSpatialConstraint(center1, center2, width)
-    good = abs(center1 - center2) > width/2
+    good = abs(center1 - center2) > width/2;
 end
 
 % used to compute k-NN
-function outLabels, distances = computeKnn(patch, candidatePatches, K, width)
+function [outLabels, distances] = computeKnn(patch, candidatePatches, K, width)
     [outLabels, distances] = knnsearch([patch], candidatePatches, 'K', K, 'Distance', 'euclidean');
     allGood = true;
     newCandidates = candidatePatches;
@@ -130,7 +209,100 @@ function outLabels, distances = computeKnn(patch, candidatePatches, K, width)
         computeKnn(patch, newCandidates, K, width);
     end
 end
-     
-     
-    
 
+% comptes the whitepoint of an input image given in CIELAB form
+function whitepoint = computeWhitepoint(input_image)
+    white_pixels = [];
+    t = 0.3;
+    disp(input_image(1, 1,:));
+    for k = 1:size(input_image, 1)
+        for l = 1:size(input_image, 2)
+           if (abs(input_image(k, l, 1)) + abs(input_image(k, l, 2)))/input_image(k, l, 3) < t
+               % TODO: fix adding to matrix
+               white_pixels = [white_pixels; input_image(k, l, :)];
+           end
+        end
+    end    
+    disp(size(white_pixels));
+    whitepoint = [sum(white_pixels, 1)/length(white_pixels), ...
+        sum(white_pixels, 2)/length(white_pixels), ...
+        sum(white_pixels, 3)/length(white_pixels)]; 
+end
+
+function dst = restore_image(src, covar, max_diff, weight_diff, iterations)
+
+    % Maintain two buffer images.
+    % In alternate iterations, one will be the
+    % source image, the other the destination.
+    buffer = zeros(size(src,1), size(src,2), 2);
+    buffer(:,:,1) = src;
+    s = 2;
+    d = 1;
+
+    % This value is guaranteed to be larger than the
+    % potential of any configuration of pixel values.
+    V_max = (size(src,1) * size(src,2)) * ...
+            ((256)^2 / (2*covar) + 4 * weight_diff * max_diff);
+
+    for i = 1 : iterations
+
+        % Switch source and destination buffers.
+        if s == 1
+            s = 2;
+            d = 1;
+        else
+            s = 1;
+            d = 2;
+        end
+
+        % Vary each pixel individually to find the
+        % values that minimise the local potentials.
+        for r = 1 : size(src,1)
+            for c = 1 : size(src,2)
+
+                V_local = V_max;
+                min_val = -1;
+                for val = 0 : 255
+
+                    % The component of the potential due to the known data.
+                    V_data = (val - src(r,c))^2 / (2 * covar);
+
+                    % The component of the potential due to the
+                    % difference between neighbouring pixel values.
+                    V_diff = 0;
+                    if r > 1
+                        V_diff = V_diff + ...
+                        min( (val - buffer(r-1,c,s))^2, max_diff );
+                    end
+                    if r < size(src,1)
+                        V_diff = V_diff + ...
+                        min( (val - buffer(r+1,c,s))^2, max_diff );
+                    end
+                    if c > 1
+                        V_diff = V_diff + ...
+                        min( (val - buffer(r,c-1,s))^2, max_diff );
+                    end
+                    if c < size(src,2)
+                        V_diff = V_diff + ...
+                        min( (val - buffer(r,c+1,s))^2, max_diff );
+                    end
+
+                    V_current = V_data + weight_diff * V_diff;
+
+                    if V_current < V_local
+                        min_val = val;
+                        V_local = V_current;
+                    end
+
+                end
+
+                buffer(r,c,d) = min_val;
+            end
+        end
+
+        i
+    end
+
+    dst = buffer(:,:,d);
+    
+end
