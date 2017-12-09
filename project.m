@@ -45,7 +45,7 @@ while not(done)
          % R = {R \ R_i} U {R_m+1, ..., R_m+4}
          patches = patches(patches~=patch);
          patches = [patches, newPatch1, newPatch2, newPatch3, newPatch4];
-         % TODO SOMEHOW HANDLE WIDTHS HERE
+         widths = [widths, width/2, width/2, width/2, width/2];
      else
          % Compute spatially-constrained k-NN:
          % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
@@ -61,17 +61,19 @@ while not(done)
              end
          end
          
-         % actually need to write own k-NN to be able to include the
-         % spatial constraint!
-         [newLabels, distances] = knnsearch([patch], candidatePatches, 'K', K);
+         % need to include the spatial constraint
+         [newLabels, distances] = computeKnn(patch, candidatePatches, K);
+         candidateLabels = [candidateLabels; newLabels];
+         
          
          
          if index < size(patches,1)
             index = index + 1;
          else
              done = true;
-     end
+        end
      
+     end
 end
 
 % at this point you have patches (R in paper) and candidateLabels (L in
@@ -109,6 +111,24 @@ end
 % used to check the spatial constraint when calculating k-NN
 function good = knnSpatialConstraint(center1, center2, width)
     good = abs(center1 - center2) > width/2
+end
+
+% used to compute k-NN
+function outLabels, distances = computeKnn(patch, candidatePatches, K, width)
+    [outLabels, distances] = knnsearch([patch], candidatePatches, 'K', K, 'Distance', 'euclidean');
+    allGood = true;
+    newCandidates = candidatePatches;
+    for i = 1:size(outLabels)-1
+        good = knnSpatialConstraint(outLabels(i), outLabels(i+1), width);
+        if not(good)
+            allGood = false;
+            newCandidates = newCandidates(newCandidates~=candidatePatches(i));
+            break;
+        end
+    end
+    if not(allGood)
+        computeKnn(patch, newCandidates, K, width);
+    end
 end
      
      
