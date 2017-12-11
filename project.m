@@ -175,6 +175,7 @@ end
 
 image = stitchImage(labels);
 image = applyEdgeBlend(image);
+% image = totalBlend(image, .1);
 
 
 %% step 4: global color and contrast matching
@@ -686,4 +687,8 @@ function image = applyEdgeBlend(image, labels)
        end
     end
     
+end
+
+function image = totalBlend(image, howBlur)
+    image = imgaussfilt(image, howBlur);
 end

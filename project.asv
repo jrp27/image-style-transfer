@@ -57,10 +57,8 @@ while not(done)
          
          % make room for new rows
          if index < size(regions, 1)
-             if index + 4 < size(regions, 1)
-                numToShift = size(regions, 1) - index - 1;
-                regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
-             end
+            numToShift = size(regions, 1) - index - 1;
+            regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
          end
          
          newPatch1 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
@@ -168,7 +166,7 @@ end
 
 
 % at end of this method, should have cell array called labels which
-% contains in it's first cell the cell array describing the region in the
+% contains in its first cell the cell array describing the region in the
 % original image (includes all details from regions data structure - region
 % contents, center, width, and offset, and in its second cell a cell array
 % describing the patch in the style image (patch includes actual content of
@@ -266,7 +264,7 @@ sig_dist_matrix = [];
 for i = 1:size(base_sigs, 1)
     sig_dist_matrix(i) = [];
     for j = 1:size(style_sigs, 1)
-        sig_dist_matrix(i)(j) = norm(base_sigs(i)(1:3) - style_sigs(j)(1:3)) + norm(base_sigs(i)(4:6) - style_sigs(j)(4:6));
+        sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
 end    
 
@@ -357,15 +355,14 @@ function whitepoint = computeWhitepoint(input_image)
     for k = 1:size(input_image, 1)
         for l = 1:size(input_image, 2)
            if (abs(input_image(k, l, 1)) + abs(input_image(k, l, 2)))/input_image(k, l, 3) < t
-               % TODO: fix adding to matrix
                white_pixels = [white_pixels; input_image(k, l, :)];
            end
         end
     end    
     disp(size(white_pixels));
-    whitepoint = [sum(white_pixels, 1)/length(white_pixels), ...
-        sum(white_pixels, 2)/length(white_pixels), ...
-        sum(white_pixels, 3)/length(white_pixels)]; 
+    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels); ...
+        sum(white_pixels(:, 1, 2))/length(white_pixels); ...
+        sum(white_pixels(:, 1, 3))/length(white_pixels)]; 
 end
 
 % used to see if a gap is meaningful, takes histogram and lower and upper bound of segment
@@ -482,7 +479,7 @@ function signatures = hsvFTC(im)
 
     for i = 1:size(im, 1)
         for j = 1:size(im, 2)
-           hue_histogram_points = [histogram_points, hsv_im(i, j, 1)];
+           hue_histogram_points = [hue_histogram_points, im(i, j, 1)];
         end
     end
 
@@ -689,4 +686,8 @@ function image = applyEdgeBlend(image, labels)
        end
     end
     
+end
+
+function image = totalBlend(image)
+    image = imga
 end
