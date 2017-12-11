@@ -1,4 +1,4 @@
-style_image = imread('pointillism.jpg');
+﻿style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % step 1: split and match
@@ -131,8 +131,8 @@ m_cat02 = [0.7328 0.4296 -0.1624; -0.7036 1.6975 0.0061; 0.0030 0.0136 0.9834];
 % 1.Estimate the white point (illuminant) of image E. For a given value t (we
 % set t = 0.3,  more  discussion  on  [9]),  the  white  point  of  an  
 % image  is  defined as the mean color value of all pixels such that 
-% (|a∗|+|b∗|)/L∗ < t ,
-% where a∗, b∗ and L∗ denote the pixel coordinates in the CIELAB color space.
+% (|aâˆ—|+|bâˆ—|)/Lâˆ— < t ,
+% where aâˆ—, bâˆ— and Lâˆ— denote the pixel coordinates in the CIELAB color space.
 
 % convert to other forms
 lab_style = rgb2lab(style_image); 
@@ -185,31 +185,19 @@ while iternum < max_iter
    iternum = iternum + 1; 
 end    
 
-% 5.  Return image I′ which has the same geometry of I but with colors 
+% 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
 
 imshow(input_im);
 
 % color chroma transfer
 
-%convert to hst
-hsv_im = rgb2hsv(lab2rgb(input_im));
+% convert to hst
+base_hsv_im = rgb2hsv(lab2rgb(input_im));
+style_hsv_im = rgb2hsv(style_image);
 
-%select hues for histogram
-histogram_points = [];
-
-for i = 1:size(hsv_im, 1)
-    for j = 1:size(hsv_im, 2)
-       histogram_points = [histogram_points, hsv_im(i, j, 1);
-    end
-end
-
-h = histogram(histogram_points);            
-            
-
-
-
-
+base_modes = hsvFTC(base_hsv_im);
+style_modes = hsvFTC(style_hsv_im);
 
 
 %% ------------------- functions go below here -----------------------------
@@ -270,6 +258,188 @@ function whitepoint = computeWhitepoint(input_image)
     whitepoint = [sum(white_pixels, 1)/length(white_pixels), ...
         sum(white_pixels, 2)/length(white_pixels), ...
         sum(white_pixels, 3)/length(white_pixels)]; 
+end
+
+% used to see if a gap is meaningful, takes histogram and lower and upper bound of segment
+function meaningful = isMeaningful(h, lower_bound, upper_bound)
+    a = find(h.BinEdges == lower_bound);
+    b = find(h.BindEdges == upper_bound);
+    N = size(h.Data);
+    L = h.NumBins;
+    epsilon = 1;
+    meaningful_threshold = (1/N)*log10((L*(L+1))/(2*epsilon));
+    r = 0;
+    for bin = a:b-1
+        r = r + h.BinCount(bin);    
+    end
+    p = (b-a+1)/L;
+    H = r*log10(r/p)+(1-r)*log((1-r)/(1-p));
+    meaningful = H > meaningful_threshold;
+end
+
+function sections = fineToCoarseSegmentation(r)
+    % calculate r_bar - Pool Adjacent Violators Algorithm
+    r_bar = histogram(histogram_points, unique(histogram_points));
+    edge = 2;
+    map_to_new_bins = [1];
+    n = 1;
+    new_bin_edges = [r.BinEdges(1)];
+    new_bin_count = [r.BinCount(1)];
+
+    for m = 2:size(r.BinCount)
+        n = n+1;
+        new_bin_edges(n) = r.BinEdges(m);
+        new_bin_count(n) = r.BinCount(m);
+        while (n > 1 and new_bin_count(n) < new_bin_count(n-1))
+            new_bin_edges(n) = [];
+            new_bin_count(n-1) = new_bin_count(n-1) + new_bin_count(n);
+            map_to_new_bins[m] = n;
+            n = n - 1;
+        end
+    end
+
+    r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
+    r_bar.BinCount = new_bin_count;       
+
+    % step 1 of FTC: find local minima
+
+    [loc_mins, min_indices] = findpeaks(-1*histogram_points);
+    % Initialize S={s0,…,sn} as the finest segmentation of the histogram, i.e., the list of all the local minima, plus the endpoints s0=1 and sn=L.
+    S = [0 + min_indices + 1];
+
+    % step 2 and 3 of FTC
+
+    keep_going = true;
+    num_iter_while = 0;
+    indices_checked = [];
+
+    for o = 2:size(S)
+        while(keep_going)
+            % Choose i randomly in [1,size(S)−1] (adjusted for 1-indexing to be [2,size(S)-(o-1)])
+            i = 2+rand*(size(S)-(o+1));
+            % If the modes on both sides Formula can be gathered in a single interval Formula following the unimodal hypothesis, group them. Update Formula.
+            % find c between s-1 and s+o
+            c = 0;
+            for k = S(i-1)+r.BinWidth:r.BinWidth:S(i+o)-r.BinWidth
+                r_ac = sum(r.BinCount(i-1:k));
+                r_bar_ac = sum(r.BinCount(S(i-1):S(k));
+                if ((r_ac >= r_bar_ac) and (not (isMeaningful(r, i-1, k))))
+                    r_cb = sum(r.BinCount(k:i+o-1));
+                    r_bar_cb = sum(r.BinCount(S(k):S(i+o-1)));
+                    if ((r_cb <= r_bar_cb) and (not (isMeaningful(r, k, i+1))))
+                        c = k;
+                        % remove all sections beyond i-1
+                        for p = 1:o
+                            S(i) = [];
+                        end
+                        % remove all sections absorbed into new section and adjacent sections from indices_checked
+                        if ismember(i-2, indices_checked)
+                            indices_checked(i-2) = [];
+                        end
+                        if ismember(i-1, indices_checked)
+                            indices_checked(i-1) = [];
+                        end
+                        if ismember(i, indices_checked)
+                            indices_checked(i) = [];
+                        end
+                        for q = 1:o
+                            if ismember(i+q, indices_checked)
+                                indices_checked(i+q) = [];
+                            end
+                        end
+                        % adjust indices of all remaining entries in indices_checked to account for o merged sections
+                        for l = 1:size(indices_checked)
+                            if indices_checked(l) > i
+                                indices_checked(l) = indices_checked(l)-o;
+                            end
+                        end
+                        break;
+                    end
+                end
+            end
+            if c == 0
+                indices_checked = [indices_checked, i];
+            end
+            if size(indices_checked) == (size(S)-o)
+                keep_going = false;
+            end
+        end             
+    end
+end
+
+function color_modes = hsvFTC(im)
+    % select hues for histogram
+    hue_histogram_points = [];
+
+    for i = 1:size(im, 1)
+        for j = 1:size(im, 2)
+           hue_histogram_points = [histogram_points, hsv_im(i, j, 1);
+        end
+    end
+
+    hue_hist = histogram(hue_histogram_points, unique(hue_histogram_points));   
+
+    hue_segments = fineToCoarseSegmentation(hue_hist);
+
+    loop_hue_hist_points = im;
+    loop_sat_hist_points = im;
+    master_color_points = im;
+
+    color_modes = [];
+
+    % repeat FTC for saturation
+    for s = 1:(size(hue_segments) - 1)
+        sat_hist_points = [];
+        temp_hue_hist_points = hue_histogram_points;
+        for t = 1:size(loop_hue_hist_points, 1)
+            for u = 1:size(loop_hue_hist_points, 2)
+                if loop_hue_hist_points(t, u, 1) < hue_segments(s+1)
+                    sat_hist_points = [sat_hist_points, loop_hue_hist_points(t, u, 2)];
+                    temp_hue_hist_points = temp_hue_hist_points(temp_hue_hist_points ~= loop_hue_hist_points(t, u));
+                end
+            end
+        end
+        loop_hue_hist_points = temp_hue_hist_points;
+        sat_hist = histogram(sat_hist_points, unique(sat_hist_points));
+        sat_segments = fineToCoarseSegmentation(sat_hist);
+
+        % repeat FTC for value
+        for v = 1:(size(sat_segments) - 1)
+            val_hist_points = [];
+            temp_sat_hist_points = sat_hist_points;
+            for w = 1:size(loop_sat_hist_points, 1)
+                for x = 1:size(loop_sat_hist_points, 2)
+                    if loop_sat_hist_points(w, x, 2) < sat_segments(v+1)
+                        val_hist_points = [val_hist_points, loop_sat_hist_points(w, x, 3)];
+                        temp_sat_hist_points = temp_sat_hist_points(temp_sat_hist_points ~= loop_sat_hist_points(w, x));
+                    end
+                end
+            end
+            loop_sat_hist_points = temp_sat_hist_points;
+            val_hist = histogram(val_hist_points, unique(val_hist_points));
+            val_segments = fineToCoarseSegmentation(val_hist);
+
+            % find representative color modes
+            for y = 1:(size(val_segments) - 1)
+                hue_sum = 0;
+                sat_sum = 0;
+                val_sum = 0;
+                temp_points = val_hist_points;
+                for z = 1:size(master_color_points, 1)
+                    for aa = 1:size(master_color_points, 2)
+                        if master_color_points(z, aa, 3) < sat_segments(y+1)
+                            hue_sum = hue_sum + master_color_points(z, aa, 1);
+                            sat_sum = sat_sum + master_color_points(z, aa, 2);
+                            val_sum = val_sum + master_color_points(z, aa, 3);
+                            temp_points = temp_points(temp_points ~= master_color_points(z, aa));
+                        end
+                    end
+                end
+                master_color_points = temp_points;
+                color_modes = [color_modes; [hue_sum/size(hue_sum), sat_sum/size(sat_sum), val_sum/size(val_sum)]];
+            end
+        end
+    end
 end
 
 function dst = restore_image(src, covar, max_diff, weight_diff, iterations)
