@@ -252,8 +252,6 @@ end
 % 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
 
-imshow(input_im);
-
 % color chroma transfer
 
 % convert to hst
@@ -272,7 +270,7 @@ for i = 1:size(base_sigs, 1)
     for j = 1:size(style_sigs, 1)
         sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
-end       
+end    
 
 
 
@@ -387,19 +385,19 @@ function meaningful = isMeaningful(h, lower_bound, upper_bound)
     meaningful = H > meaningful_threshold;
 end
 
-function sections = fineToCoarseSegmentation(r)
+function S = fineToCoarseSegmentation(r)
     % calculate r_bar - Pool Adjacent Violators Algorithm
-    r_bar = histogram(r.Data, unique(r.Data));
+    %r_bar = histogram(r.Data, unique(r.Data));
     edge = 2;
     map_to_new_bins = [1];
     n = 1;
     new_bin_edges = [r.BinEdges(1)];
-    new_bin_count = [r.BinCount(1)];
+    new_bin_count = [r.BinCounts(1)];
 
-    for m = 2:size(r.BinCount)
+    for m = 2:size(r.BinCounts)
         n = n+1;
         new_bin_edges(n) = r.BinEdges(m);
-        new_bin_count(n) = r.BinCount(m);
+        new_bin_count(n) = r.BinCounts(m);
         while (n > 1 && new_bin_count(n) < new_bin_count(n-1))
             new_bin_edges(n) = [];
             new_bin_count(n-1) = new_bin_count(n-1) + new_bin_count(n);
@@ -408,12 +406,12 @@ function sections = fineToCoarseSegmentation(r)
         end
     end
 
-    r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
-    r_bar.BinCount = new_bin_count;       
+    %r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
+    %r_bar.BinCount = new_bin_count;       
 
     % step 1 of FTC: find local minima
 
-    [loc_mins, min_indices] = findpeaks(-1*histogram_points);
+    [loc_mins, min_indices] = findpeaks(-1*r.Data);
     % Initialize S={s0,…,sn} as the finest segmentation of the histogram, i.e., the list of all the local minima, plus the endpoints s0=1 and sn=L.
     S = [0 + min_indices + 1];
 
@@ -431,11 +429,11 @@ function sections = fineToCoarseSegmentation(r)
             % find c between s-1 and s+o
             c = 0;
             for k = S(i-1)+r.BinWidth:r.BinWidth:S(i+o)-r.BinWidth
-                r_ac = sum(r.BinCount(i-1:k));
-                r_bar_ac = sum(r.BinCount(S(i-1):S(k)));
+                r_ac = sum(r.BinCounts(i-1:k));
+                r_bar_ac = sum(r.BinCounts(S(i-1):S(k)));
                 if ((r_ac >= r_bar_ac) && (not (isMeaningful(r, i-1, k))))
-                    r_cb = sum(r.BinCount(k:i+o-1));
-                    r_bar_cb = sum(r.BinCount(S(k):S(i+o-1)));
+                    r_cb = sum(r.BinCounts(k:i+o-1));
+                    r_bar_cb = sum(r.BinCounts(S(k):S(i+o-1)));
                     if ((r_cb <= r_bar_cb) && (not (isMeaningful(r, k, i+1))))
                         c = k;
                         % remove all sections beyond i-1
@@ -480,31 +478,32 @@ end
 % takes an image (in HSV color form) and returns the modes returned by the fine to coarse segmentation algorithm in the form of signatures, where each mode is represented by a vector of the means and standard deviations of the cielab form of the mode
 function signatures = hsvFTC(im)
     % select hues for histogram
-    hue_histogram_points = [];
+    hue_histogram_points = zeros(size(im, 1), size(im, 2), 1);
 
     for i = 1:size(im, 1)
         for j = 1:size(im, 2)
-           hue_histogram_points = [hue_histogram_points, im(i, j, 1)];
+           hue_histogram_points(i, j, 1) = im(i, j, 1);
         end
     end
 
     hue_hist = histogram(hue_histogram_points, unique(hue_histogram_points));   
-
+    
     hue_segments = fineToCoarseSegmentation(hue_hist);
-
+        
     loop_hue_hist_points = im;
     loop_sat_hist_points = im;
     master_color_points = im;
+    disp(size(master_color_points));
 
     signatures = [];
 
     % repeat FTC for saturation
-    for s = 1:(size(hue_segments) - 1)
+    for s = 1:(size(hue_segments,2) - 1)
         sat_hist_points = [];
-        temp_hue_hist_points = hue_histogram_points;
+        temp_hue_hist_points = loop_hue_hist_points;
         for t = 1:size(loop_hue_hist_points, 1)
             for u = 1:size(loop_hue_hist_points, 2)
-                if loop_hue_hist_points(t, u, 1) < hue_segments(s+1)
+                if loop_hue_hist_points(t, u, 1) < hue_segments(1,s+1)
                     sat_hist_points = [sat_hist_points, loop_hue_hist_points(t, u, 2)];
                     temp_hue_hist_points = temp_hue_hist_points(temp_hue_hist_points ~= loop_hue_hist_points(t, u));
                 end
@@ -515,12 +514,12 @@ function signatures = hsvFTC(im)
         sat_segments = fineToCoarseSegmentation(sat_hist);
 
         % repeat FTC for value
-        for v = 1:(size(sat_segments) - 1)
+        for v = 1:(size(sat_segments,2) - 1)
             val_hist_points = [];
-            temp_sat_hist_points = sat_hist_points;
+            temp_sat_hist_points = loop_sat_hist_points;
             for w = 1:size(loop_sat_hist_points, 1)
                 for x = 1:size(loop_sat_hist_points, 2)
-                    if loop_sat_hist_points(w, x, 2) < sat_segments(v+1)
+                    if loop_sat_hist_points(w, x, 1) < hue_segments(1,s+1) && loop_sat_hist_points(w, x, 2) < sat_segments(1,v+1)
                         val_hist_points = [val_hist_points, loop_sat_hist_points(w, x, 3)];
                         temp_sat_hist_points = temp_sat_hist_points(temp_sat_hist_points ~= loop_sat_hist_points(w, x));
                     end
@@ -531,15 +530,16 @@ function signatures = hsvFTC(im)
             val_segments = fineToCoarseSegmentation(val_hist);
 
             % find representative color modes and make signatures
-            for y = 1:(size(val_segments) - 1)
+            for y = 1:(size(val_segments,2) - 1)
                 l_list = [];
                 a_list = [];
                 b_list = [];
-                temp_points = val_hist_points;
+                temp_points = master_color_points;
                 for z = 1:size(master_color_points, 1)
                     for aa = 1:size(master_color_points, 2)
-                        if master_color_points(z, aa, 3) < sat_segments(y+1)
-                            lab_color = rgb2lab(hsv2rgb(master_color_points(z, aa)));
+                        if  master_color_points(z, aa, 1) < hue_segments(1,s+1) && master_color_points(z, aa, 2) < sat_segments(1,v+1) && master_color_points(z, aa, 3) < val_segments(1,y+1)
+                            disp(size(master_color_points(z, aa)));
+                            lab_color = rgb2lab(hsv2rgb([master_color_points(z, aa, 1); master_color_points(z, aa, 2); master_color_points(z, aa, 3)]));
                             l_list = [l_list, lab_color(1)];
                             a_list = [a_list, lab_color(2)];
                             b_list = [b_list, lab_color(3)];
