@@ -1,7 +1,7 @@
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
-style_image = imread('pointillism.jpg');
-base_image = imread('cat.jpg');
+style_image = imread('watercolor.jpg');
+base_image = imread('kitten.jpg');
 
 % step 1: split and match
 min_width = 8;
@@ -57,13 +57,8 @@ while not(done)
          
          % make room for new rows
          if index < size(regions, 1)
-             if index + 4 < size(regions, 1)
-                numToShift = size(regions, 1) - index - 1;
-                regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
-             else
-                 numToShift = 2;
-                 regions(index+5:index+5+numToShift, :) = regions(index+1:index+1+numToShift, :);
-             end
+            numToShift = size(regions, 1) - index - 1;
+            regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
          end
          
          newPatch1 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
