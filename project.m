@@ -1,4 +1,4 @@
-style_image = imread('pointillism.jpg');
+﻿le_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
@@ -211,8 +211,20 @@ imshow(input_im);
 base_hsv_im = rgb2hsv(lab2rgb(input_im));
 style_hsv_im = rgb2hsv(style_image);
 
-base_modes = hsvFTC(base_hsv_im);
-style_modes = hsvFTC(style_hsv_im);
+% find signatures
+base_sigs = hsvFTC(base_hsv_im);
+style_sigs = hsvFTC(style_hsv_im);
+
+sig_dist_matrix = [];
+
+% create distance matrix
+for i = 1:size(base_sigs, 1)
+    sig_dist_matrix(i) = [];
+    for j = 1:size(style_sigs, 1)
+        sig_dist_matrix(i)(j) = norm(base_sigs(i)(1:3) - style_sigs(j)(1:3)) + norm(base_sigs(i)(4:6) - style_sigs(j)(4:6));
+    end
+end    
+
 
 
 %% ------------------- functions go below here -----------------------------
@@ -382,7 +394,8 @@ function sections = fineToCoarseSegmentation(r)
     end
 end
 
-function color_modes = hsvFTC(im)
+% takes an image (in HSV color form) and returns the modes returned by the fine to coarse segmentation algorithm in the form of signatures, where each mode is represented by a vector of the means and standard deviations of the cielab form of the mode
+function signatures = hsvFTC(im)
     % select hues for histogram
     hue_histogram_points = [];
 
@@ -400,7 +413,7 @@ function color_modes = hsvFTC(im)
     loop_sat_hist_points = im;
     master_color_points = im;
 
-    color_modes = [];
+    signatures = [];
 
     % repeat FTC for saturation
     for s = 1:(size(hue_segments) - 1)
@@ -434,24 +447,25 @@ function color_modes = hsvFTC(im)
             val_hist = histogram(val_hist_points, unique(val_hist_points));
             val_segments = fineToCoarseSegmentation(val_hist);
 
-            % find representative color modes
+            % find representative color modes and make signatures
             for y = 1:(size(val_segments) - 1)
-                hue_sum = 0;
-                sat_sum = 0;
-                val_sum = 0;
+                l_list = [];
+                a_list = [];
+                b_list = [];
                 temp_points = val_hist_points;
                 for z = 1:size(master_color_points, 1)
                     for aa = 1:size(master_color_points, 2)
                         if master_color_points(z, aa, 3) < sat_segments(y+1)
-                            hue_sum = hue_sum + master_color_points(z, aa, 1);
-                            sat_sum = sat_sum + master_color_points(z, aa, 2);
-                            val_sum = val_sum + master_color_points(z, aa, 3);
+                            lab_color = rgb2lab(hsv2rgb(master_color_points(z, aa)));
+                            l_list = [l_list, lab_color(1)];
+                            a_list = [a_list, lab_color(2)];
+                            b_list = [b_list, lab_color(3)];
                             temp_points = temp_points(temp_points ~= master_color_points(z, aa));
                         end
                     end
                 end
                 master_color_points = temp_points;
-                color_modes = [color_modes; [hue_sum/size(hue_sum), sat_sum/size(sat_sum), val_sum/size(val_sum)]];
+                signatures = [signatures; [mean(l_list), mean(a_list), mean(b_list), std(l_list), std(a_list), std(b_list)]];
             end
         end
     end
