@@ -264,7 +264,7 @@ sig_dist_matrix = [];
 for i = 1:size(base_sigs, 1)
     sig_dist_matrix(i) = [];
     for j = 1:size(style_sigs, 1)
-        sig_dist_matrix(i)(j) = norm(base_sigs(i)(1:3) - style_sigs(j)(1:3)) + norm(base_sigs(i)(4:6) - style_sigs(j)(4:6));
+        sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
 end    
 
@@ -355,15 +355,14 @@ function whitepoint = computeWhitepoint(input_image)
     for k = 1:size(input_image, 1)
         for l = 1:size(input_image, 2)
            if (abs(input_image(k, l, 1)) + abs(input_image(k, l, 2)))/input_image(k, l, 3) < t
-               % TODO: fix adding to matrix
                white_pixels = [white_pixels; input_image(k, l, :)];
            end
         end
     end    
     disp(size(white_pixels));
-    whitepoint = [sum(white_pixels, 1)/length(white_pixels), ...
-        sum(white_pixels, 2)/length(white_pixels), ...
-        sum(white_pixels, 3)/length(white_pixels)]; 
+    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels); ...
+        sum(white_pixels(:, 1, 2))/length(white_pixels); ...
+        sum(white_pixels(:, 1, 3))/length(white_pixels)]; 
 end
 
 % used to see if a gap is meaningful, takes histogram and lower and upper bound of segment
@@ -480,7 +479,7 @@ function signatures = hsvFTC(im)
 
     for i = 1:size(im, 1)
         for j = 1:size(im, 2)
-           hue_histogram_points = [histogram_points, hsv_im(i, j, 1)];
+           hue_histogram_points = [hue_histogram_points, im(i, j, 1)];
         end
     end
 
