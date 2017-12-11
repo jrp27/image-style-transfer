@@ -1,4 +1,4 @@
-﻿style_image = imread('pointillism.jpg');
+style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % step 1: split and match
@@ -290,10 +290,10 @@ function sections = fineToCoarseSegmentation(r)
         n = n+1;
         new_bin_edges(n) = r.BinEdges(m);
         new_bin_count(n) = r.BinCount(m);
-        while (n > 1 and new_bin_count(n) < new_bin_count(n-1))
+        while (n > 1 && new_bin_count(n) < new_bin_count(n-1))
             new_bin_edges(n) = [];
             new_bin_count(n-1) = new_bin_count(n-1) + new_bin_count(n);
-            map_to_new_bins[m] = n;
+            map_to_new_bins(m) = n;
             n = n - 1;
         end
     end
@@ -322,11 +322,11 @@ function sections = fineToCoarseSegmentation(r)
             c = 0;
             for k = S(i-1)+r.BinWidth:r.BinWidth:S(i+o)-r.BinWidth
                 r_ac = sum(r.BinCount(i-1:k));
-                r_bar_ac = sum(r.BinCount(S(i-1):S(k));
-                if ((r_ac >= r_bar_ac) and (not (isMeaningful(r, i-1, k))))
+                r_bar_ac = sum(r.BinCount(S(i-1):S(k)));
+                if ((r_ac >= r_bar_ac) && (not (isMeaningful(r, i-1, k))))
                     r_cb = sum(r.BinCount(k:i+o-1));
                     r_bar_cb = sum(r.BinCount(S(k):S(i+o-1)));
-                    if ((r_cb <= r_bar_cb) and (not (isMeaningful(r, k, i+1))))
+                    if ((r_cb <= r_bar_cb) && (not (isMeaningful(r, k, i+1))))
                         c = k;
                         % remove all sections beyond i-1
                         for p = 1:o
@@ -373,7 +373,7 @@ function color_modes = hsvFTC(im)
 
     for i = 1:size(im, 1)
         for j = 1:size(im, 2)
-           hue_histogram_points = [histogram_points, hsv_im(i, j, 1);
+           hue_histogram_points = [histogram_points, hsv_im(i, j, 1)];
         end
     end
 
