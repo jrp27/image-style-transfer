@@ -1,79 +1,123 @@
+% requires base_image to be a square and style_image to be equal to or
+% larger in size than base_image along both dimensions
 style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % step 1: split and match
-min_width = 8^2;
-max_width = 256^2;
+min_width = 8;
+max_width = 256;
 omega = 15;
 K = 4;
 
-% regions is: patch, xOffset, yOffset, xCenter, yCenter, width;
-regions = [base_image, 0, 0, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)];
+% regions is cell array where each row contains: patch, xOffset, yOffset, xCenter, yCenter, width;
+regions = {base_image, 1, 1, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)};
+global PATCH_INDEX;
 PATCH_INDEX = 1;
+global X_OFFSET_INDEX;
 X_OFFSET_INDEX = 2;
+global Y_OFFSET_INDEX;
 Y_OFFSET_INDEX = 3;
+global X_CENTER_INDEX;
 X_CENTER_INDEX = 4;
+global Y_CENTER_INDEX;
 Y_CENTER_INDEX = 5;
+global WIDTH_INDEX;
 WIDTH_INDEX = 6;
 
-candidateLabels = [];
+% candidate labels is cell array where each row has 2 entries: index into
+% regions for corresponding region, cell array containing: style 
+% patch, distance b/w region patch and style patch, centerX of style patch,
+% centerY of style patch
+candidateLabels = {};
 
 index = 1;
 done = false;
 
 while not(done)
     % R_i
-     patch = regions(index, PATCH_INDEX);
-     width = regions(index, WIDTH_INDEX);
+     patch = regions{index, PATCH_INDEX};
+     width = regions{index, WIDTH_INDEX};
      % x_i <- center of R_i
-     center = [regions(index, X_CENTER_INDEX), regions(index, Y_CENTER_INDEX)];
+     center = [regions{index, X_CENTER_INDEX}, regions{index, Y_CENTER_INDEX}];
      % sigma_i <- sqrt(var(p^u_xi))
-     sigma_i = sqrt(var(patch));
+     varianceablePatch = double(patch);
+     sigma_i = sqrt(var(varianceablePatch(:)));
      
      % Compute y_i = arg_y min d[p^u_xi, p^v_y]
-     ds, newPatches = computeArg(patch, index);
+     [ds, newPatches] = computeArg(regions, index, style_image);
      minD = min(ds);
+     minD = minD(1);
      newPatchIndex = find(ds==minD);
      y_i = newPatches(newPatchIndex);
      
      % if C(p^u_x, p^v_y) is true
-     if (sigma_i + minD > omega && width > min_width) || width > max_width
-         newWidth = width/2;
+     if ((sigma_i + minD > omega) && (width > min_width)) || (width > max_width)
          % Split R_i into four
          % R = {R \ R_i} U {R_m+1, ..., R_m+4}
-         removeCondition = regions(:, 1)==patch;
-         regions(removeCondition) = [];
          
-         newPatch1 = base_image(regions(index,X_OFFSET_INDEX):regions(index,X_OFFSET_INDEX)+width/2, regions(index,Y_OFFSET_INDEX):regions(index,Y_OFFSET_INDEX)+width/2, :);
+         % make room for new rows
+         if index < size(regions, 1)
+             if index + 4 < size(regions, 1)
+                numToShift = size(regions, 1) - index - 1;
+                regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
+             else
+                 numToShift = 2;
+                 regions(index+5:index+5+numToShift, :) = regions(index+1:index+1+numToShift, :);
+             end
+         end
+         
+         newPatch1 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
          newWidth = width/2;
-         newXOffset1 = regions(index, X_OFFSET_INDEX);
-         newYOffset1 = regions(index, Y_OFFSET_INDEX);
+         newXOffset1 = regions{index, X_OFFSET_INDEX};
+         newYOffset1 = regions{index, Y_OFFSET_INDEX};
          newXCenter1 = newXOffset1 + newWidth/2;
          newYCenter1 = newYOffset1 + newWidth/2;
-         newRegion1 = [newPatch1, newXOffset1, newYOffset1, newXCenter1, newYCenter1, newWidth];
+         regions{index+1, PATCH_INDEX} = newPatch1;
+         regions{index+1, X_OFFSET_INDEX} = newXOffset1;
+         regions{index+1, Y_OFFSET_INDEX} = newYOffset1;
+         regions{index+1, X_CENTER_INDEX} = newXCenter1;
+         regions{index+1, Y_CENTER_INDEX} = newYCenter1;
+         regions{index+1, WIDTH_INDEX} = newWidth;
          
-         newPatch2 = base_image(regions(index,X_OFFSET_INDEX)+width/2:regions(index,X_OFFSET_INDEX)+width, regions(index,Y_OFFSET_INDEX):regions(index,Y_OFFSET_IMAGE)+width/2, :);
-         newXOffset2 = regions(index, X_OFFSET_INDEX) + width/2;
-         newYOffset2 = regions(index, Y_OFFSET_INDEX);
+         newPatch2 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
+         newXOffset2 = regions{index, X_OFFSET_INDEX} + width/2;
+         newYOffset2 = regions{index, Y_OFFSET_INDEX};
          newXCenter2 = newXOffset2 + newWidth/2;
          newYCenter2 = newYOffset2 + newWidth/2;
-         newRegion1 = [newPatch2, newXOffset2, newYOffset2, newXCenter2, newYCenter2, newWidth];
+         regions{index+2, PATCH_INDEX} = newPatch2;
+         regions{index+2, X_OFFSET_INDEX} = newXOffset2;
+         regions{index+2, Y_OFFSET_INDEX} = newYOffset2;
+         regions{index+2, X_CENTER_INDEX} = newXCenter2;
+         regions{index+2, Y_CENTER_INDEX} = newYCenter2;
+         regions{index+2, WIDTH_INDEX} = newWidth;
          
-         newPatch3 = base_image(regions(index,X_OFFSET_INDEX):regions(index,X_OFFSET_INDEX)+width/2, regions(index,Y_OFFSET_INDEX)+width/2:regions(index,Y_OFFSET_INDEX)+width, :);
-         newXOffset3 = regions(index, X_OFFSET_INDEX);
-         newYOffset3 = regions(index, Y_OFFSET_INDEX) + width/2;
+         newPatch3 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
+         newXOffset3 = regions{index, X_OFFSET_INDEX};
+         newYOffset3 = regions{index, Y_OFFSET_INDEX} + width/2;
          newXCenter3 = newXOffset3 + newWidth/2;
          newYCenter3 = newYOffset3 + newWidth/2;
-         newRegion3 = [newPatch3, newXOffset3, newYOffset3, newXCenter3, newYCenter3, newWidth];
+         regions{index+3, PATCH_INDEX} = newPatch3;
+         regions{index+3, X_OFFSET_INDEX} = newXOffset3;
+         regions{index+3, Y_OFFSET_INDEX} = newYOffset3;
+         regions{index+3, X_CENTER_INDEX} = newXCenter3;
+         regions{index+3, Y_CENTER_INDEX} = newYCenter3;
+         regions{index+3, WIDTH_INDEX} = newWidth;
          
-         newPatch4 = base_image(regions(index,X_OFFSET_INDEX)+width/2:regions(index,X_OFFSET_INDEX)+width, regions(index,Y_OFFSET_INDEX)+width/2:regions(index,Y_OFFSET_INDEX)+width, :);
-         newXOffset4 = regions(index, X_OFFSET_INDEX) + width/2;
-         newYOffset4 = regions(index, Y_OFFSET_INDEX) + width/2;
+         newPatch4 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
+         newXOffset4 = regions{index, X_OFFSET_INDEX} + width/2;
+         newYOffset4 = regions{index, Y_OFFSET_INDEX} + width/2;
          newXCenter4 = newXOffset4 + newWidth/2;
          newYCenter4 = newYOffset4 + newWidth/2;
-         newRegion4 = [newPatch4, newXOffset4, newYOffset4, newXCenter4, newYCenter4, newWidth];
+         regions{index+4, PATCH_INDEX} = newPatch4;
+         regions{index+4, X_OFFSET_INDEX} = newXOffset4;
+         regions{index+4, Y_OFFSET_INDEX} = newYOffset4;
+         regions{index+4, X_CENTER_INDEX} = newXCenter4;
+         regions{index+4, Y_CENTER_INDEX} = newYCenter4;
+         regions{index+4, WIDTH_INDEX} = newWidth;
          
-         regions = [regions; newRegion1; newRegion2; newRegion3; newRegion4];
+         % remove original patch that we split
+         regions(index, :) = [];
+         
      else
          % Compute spatially-constrained k-NN:
          % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
@@ -81,30 +125,36 @@ while not(done)
          % Compute k-NN over the patches of the style_image at different
          % centers
          % X = width/2
-         candidatePatches = [];
-         for i = 1:size(style_image, 1)/width
-             for j = 1:size(style_image, 2)/width
-                 newPatch = style_image(i:i+width, j:j+width, :);
-                 candidatePatches = [candidatePatches, newPatch];
+         candidatePatches = {};
+         patchesIndex = 1;
+         for i = 1:size(style_image, 1) - width
+             for j = 1:size(style_image, 2) - width
+                 newPatch = style_image(i:i+width-1, j:j+width-1, :);
+                 candidatePatches{patchesIndex, 1} = newPatch;
+                 candidatePatches{patchesIndex, 2} = i+width/2;
+                 candidatePatches{patchesIndex, 3} = j+width/2;
+                 patchesIndex = patchesIndex + 1;
              end
          end
          
          % need to include the spatial constraint
-         [newLabels, distances] = computeKnn(patch, candidatePatches, K);
-         candidateLabels = [candidateLabels; newLabels];
+         neighborResults = computeKnn(patch, candidatePatches, K, width);
+         candidateLabelIndex = size(candidateLabels, 1) + 1;
+         candidateLabels{candidateLabelIndex, 1} = index;
+         candidateLabels{candidateLabelIndex, 2} = neighborResults;
          
          
          
-         if index < size(patches,1)
+         if index < size(regions,1)
             index = index + 1;
          else
              done = true;
-        end
+         end
      
      end
 end
 
-% at this point you have patches (R in paper) and candidateLabels (L in
+% at this point you have regions (R in paper) and candidateLabels (L in
 % paper) to work with for the rest of the steps
 
 %% step 2: optimization
@@ -201,14 +251,19 @@ imshow(input_im);
 
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
-function [ds, newPatches] = computeArg(patch, index, style_image)
-    width = regions(index, WIDTH_INDEX);
+function [ds, newPatches] = computeArg(regions, index, style_image)
+    global WIDTH_INDEX;
+    MY_WIDTH_INDEX = WIDTH_INDEX;
+    global PATCH_INDEX;
+    MY_PATCH_INDEX = PATCH_INDEX;
+    patch = regions{index, MY_PATCH_INDEX};
+    width = regions{index, MY_WIDTH_INDEX};
     ds = [];
     newPatches = [];
     for i = 1:size(style_image, 1)/width
         for j = 1:size(style_image, 2)/width
-            newPatch = style_image(i:i+width, j:j+width, :);
-            d = (abs(patch - newPatch).^2)/width^2;
+            newPatch = style_image(i:i+width-1, j:j+width-1, :);
+            d = (abs(double(patch(:)) - double(newPatch(:))).^2)/(width^2);
             ds = [ds, d];
             newPatches = [newPatches, newPatch];
         end
@@ -216,25 +271,55 @@ function [ds, newPatches] = computeArg(patch, index, style_image)
 end
 
 % used to check the spatial constraint when calculating k-NN
-function good = knnSpatialConstraint(center1, center2, width)
-    good = abs(center1 - center2) > width/2;
-end
+% function good = knnSpatialConstraint(center1X, center1Y, center2X, center2Y, patchWidth)
+%     good = pdist([center1X, center1Y; center2X, center2Y], 'euclidean') > patchWidth/2;
+% end
 
 % used to compute k-NN
-function [outLabels, distances] = computeKnn(patch, candidatePatches, K, width)
-    [outLabels, distances] = knnsearch([patch], candidatePatches, 'K', K, 'Distance', 'euclidean');
-    allGood = true;
-    newCandidates = candidatePatches;
-    for i = 1:size(outLabels)-1
-        good = knnSpatialConstraint(outLabels(i), outLabels(i+1), width);
-        if not(good)
-            allGood = false;
-            newCandidates = newCandidates(newCandidates~=candidatePatches(i));
-            break;
+function neighbors = computeKnn(patch, candidatePatches, K, width)
+    % patch, distance, centerX, centerY
+    neighbors = {};
+    for i = 1:size(candidatePatches)
+        distance = sqrt(sum((patch(:) - candidatePatches{i, 1}(:)) .^ 2));
+        better = false;
+        worstIndex = -1;
+        for j = 1:size(neighbors, 1)
+            if neighbors{j, 2} > distance
+                better = true;
+                if worstIndex == -1
+                    worstIndex = j;
+                elseif neighbors{worstIndex, 2} < neighbors{j, 2}
+                    worstIndex = j;
+                end
+            end
         end
-    end
-    if not(allGood)
-        computeKnn(patch, newCandidates, K, width);
+        
+        
+        if better == true || size(neighbors, 1) < K
+            newNeighbors = neighbors(:,:);
+            if worstIndex >= 1
+                newNeighbors{worstIndex, 1} = candidatePatches{i, 1};
+                newNeighbors{worstIndex, 2} = distance;
+                newNeighbors{worstIndex, 3} = candidatePatches{i, 2};
+                newNeighbors{worstIndex, 4} = candidatePatches{i, 3};
+            else
+                neighborsIndex = size(newNeighbors, 1) + 1;
+                newNeighbors{neighborsIndex, 1} = candidatePatches{i, 1};
+                newNeighbors{neighborsIndex, 2} = distance;
+                newNeighbors{neighborsIndex, 3} = candidatePatches{i, 2};
+                newNeighbors{neighborsIndex, 4} = candidatePatches{i, 3};
+            end
+            % should replace unless spatial constraint prohibits
+            failedConstraint = false;
+            for j = 1:size(neighbors, 1)
+                if sqrt((candidatePatches{i, 2} - neighbors{j, 3}).^2 + (candidatePatches{i, 3} - neighbors{j, 4}).^2) > width/2 == false
+                    failedConstraint = true;
+                end
+            end
+            if failedConstraint == false
+                neighbors = newNeighbors(:,:);
+            end
+        end
     end
 end
 
