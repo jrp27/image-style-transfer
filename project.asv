@@ -119,11 +119,7 @@ while not(done)
          
          % remove original patch that we split
          regions(index, :) = [];
-         
-<<<<<<< HEAD
-=======
-         regions = [regions; newRegion1; newRegion2; newRegion3; newRegion4];
->>>>>>> f9d01ebb167b91b1adacdf0de18a453ff97694a8
+     
      else
          % Compute spatially-constrained k-NN:
          % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
@@ -273,18 +269,12 @@ style_modes = hsvFTC(style_hsv_im);
 
 % used to calculate the minimum distance between a base patch and all
 % possible style patches
-<<<<<<< HEAD
 function [ds, newPatches] = computeArg(regions, index, style_image)
     global WIDTH_INDEX;
     MY_WIDTH_INDEX = WIDTH_INDEX;
     global PATCH_INDEX;
     MY_PATCH_INDEX = PATCH_INDEX;
     patch = regions{index, MY_PATCH_INDEX};
-    width = regions{index, MY_WIDTH_INDEX};
-=======
-function [ds, newPatches] = computeArg(patch, index, style_image)
-    width = regions(index, WIDTH_INDEX);
->>>>>>> f9d01ebb167b91b1adacdf0de18a453ff97694a8
     ds = [];
     newPatches = [];
     for i = 1:size(style_image, 1)/width
