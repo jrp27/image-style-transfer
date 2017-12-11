@@ -167,11 +167,24 @@ end
 %   due to the difference between two neighbouring pixel values.
 % * iterations is the number of iterations to perform.
 
+
+
+
+% at end of this method, should have cell array called labels which
+% contains in it's first cell the cell array describing the region in the
+% original image (includes all details from regions data structure - region
+% contents, center, width, and offset, and in its second cell a cell array
+% describing the patch in the style image (patch includes actual content of
+% patch + center)
 %% step 3: bilinear blending
+
+image = stitchImage(labels);
+image = applyEdgeBlend(image);
+
 
 %% step 4: global color and contrast matching
 
-style_image = imread('pontillism.jpg');
+style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
 
 % chromatic adaptation transform
@@ -181,8 +194,8 @@ m_cat02 = [0.7328 0.4296 -0.1624; -0.7036 1.6975 0.0061; 0.0030 0.0136 0.9834];
 % 1.Estimate the white point (illuminant) of image E. For a given value t (we
 % set t = 0.3,  more  discussion  on  [9]),  the  white  point  of  an  
 % image  is  defined as the mean color value of all pixels such that 
-% (|a∗|+|b∗|)/L∗ < t ,
-% where a∗, b∗ and L∗ denote the pixel coordinates in the CIELAB color space.
+% (|aâˆ—|+|bâˆ—|)/Lâˆ— < t ,
+% where aâˆ—, bâˆ— and Lâˆ— denote the pixel coordinates in the CIELAB color space.
 
 % convert to other forms
 lab_style = rgb2lab(style_image); 
@@ -235,13 +248,30 @@ while iternum < max_iter
    iternum = iternum + 1; 
 end    
 
-% 5.  Return image I′ which has the same geometry of I but with colors 
+% 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
 
 imshow(input_im);
 
 % color chroma transfer
 
+% convert to hst
+base_hsv_im = rgb2hsv(lab2rgb(input_im));
+style_hsv_im = rgb2hsv(style_image);
+
+% find signatures
+base_sigs = hsvFTC(base_hsv_im);
+style_sigs = hsvFTC(style_hsv_im);
+
+sig_dist_matrix = [];
+
+% create distance matrix
+for i = 1:size(base_sigs, 1)
+    sig_dist_matrix(i) = [];
+    for j = 1:size(style_sigs, 1)
+        sig_dist_matrix(i)(j) = norm(base_sigs(i)(1:3) - style_sigs(j)(1:3)) + norm(base_sigs(i)(4:6) - style_sigs(j)(4:6));
+    end
+end    
 
 
 
@@ -322,7 +352,6 @@ function neighbors = computeKnn(patch, candidatePatches, K, width)
         end
     end
 end
-
 % comptes the whitepoint of an input image given in CIELAB form
 function whitepoint = computeWhitepoint(input_image)
     white_pixels = [];
@@ -340,6 +369,190 @@ function whitepoint = computeWhitepoint(input_image)
     whitepoint = [sum(white_pixels, 1)/length(white_pixels), ...
         sum(white_pixels, 2)/length(white_pixels), ...
         sum(white_pixels, 3)/length(white_pixels)]; 
+end
+
+% used to see if a gap is meaningful, takes histogram and lower and upper bound of segment
+function meaningful = isMeaningful(h, lower_bound, upper_bound)
+    a = find(h.BinEdges == lower_bound);
+    b = find(h.BindEdges == upper_bound);
+    N = size(h.Data);
+    L = h.NumBins;
+    epsilon = 1;
+    meaningful_threshold = (1/N)*log10((L*(L+1))/(2*epsilon));
+    r = 0;
+    for bin = a:b-1
+        r = r + h.BinCount(bin);    
+    end
+    p = (b-a+1)/L;
+    H = r*log10(r/p)+(1-r)*log((1-r)/(1-p));
+    meaningful = H > meaningful_threshold;
+end
+
+function sections = fineToCoarseSegmentation(r)
+    % calculate r_bar - Pool Adjacent Violators Algorithm
+    r_bar = histogram(histogram_points, unique(histogram_points));
+    edge = 2;
+    map_to_new_bins = [1];
+    n = 1;
+    new_bin_edges = [r.BinEdges(1)];
+    new_bin_count = [r.BinCount(1)];
+
+    for m = 2:size(r.BinCount)
+        n = n+1;
+        new_bin_edges(n) = r.BinEdges(m);
+        new_bin_count(n) = r.BinCount(m);
+        while (n > 1 && new_bin_count(n) < new_bin_count(n-1))
+            new_bin_edges(n) = [];
+            new_bin_count(n-1) = new_bin_count(n-1) + new_bin_count(n);
+            map_to_new_bins(m) = n;
+            n = n - 1;
+        end
+    end
+
+    r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
+    r_bar.BinCount = new_bin_count;       
+
+    % step 1 of FTC: find local minima
+
+    [loc_mins, min_indices] = findpeaks(-1*histogram_points);
+    % Initialize S={s0,…,sn} as the finest segmentation of the histogram, i.e., the list of all the local minima, plus the endpoints s0=1 and sn=L.
+    S = [0 + min_indices + 1];
+
+    % step 2 and 3 of FTC
+
+    keep_going = true;
+    num_iter_while = 0;
+    indices_checked = [];
+
+    for o = 2:size(S)
+        while(keep_going)
+            % Choose i randomly in [1,size(S)−1] (adjusted for 1-indexing to be [2,size(S)-(o-1)])
+            i = 2+rand*(size(S)-(o+1));
+            % If the modes on both sides Formula can be gathered in a single interval Formula following the unimodal hypothesis, group them. Update Formula.
+            % find c between s-1 and s+o
+            c = 0;
+            for k = S(i-1)+r.BinWidth:r.BinWidth:S(i+o)-r.BinWidth
+                r_ac = sum(r.BinCount(i-1:k));
+                r_bar_ac = sum(r.BinCount(S(i-1):S(k)));
+                if ((r_ac >= r_bar_ac) && (not (isMeaningful(r, i-1, k))))
+                    r_cb = sum(r.BinCount(k:i+o-1));
+                    r_bar_cb = sum(r.BinCount(S(k):S(i+o-1)));
+                    if ((r_cb <= r_bar_cb) && (not (isMeaningful(r, k, i+1))))
+                        c = k;
+                        % remove all sections beyond i-1
+                        for p = 1:o
+                            S(i) = [];
+                        end
+                        % remove all sections absorbed into new section and adjacent sections from indices_checked
+                        if ismember(i-2, indices_checked)
+                            indices_checked(i-2) = [];
+                        end
+                        if ismember(i-1, indices_checked)
+                            indices_checked(i-1) = [];
+                        end
+                        if ismember(i, indices_checked)
+                            indices_checked(i) = [];
+                        end
+                        for q = 1:o
+                            if ismember(i+q, indices_checked)
+                                indices_checked(i+q) = [];
+                            end
+                        end
+                        % adjust indices of all remaining entries in indices_checked to account for o merged sections
+                        for l = 1:size(indices_checked)
+                            if indices_checked(l) > i
+                                indices_checked(l) = indices_checked(l)-o;
+                            end
+                        end
+                        break;
+                    end
+                end
+            end
+            if c == 0
+                indices_checked = [indices_checked, i];
+            end
+            if size(indices_checked) == (size(S)-o)
+                keep_going = false;
+            end
+        end             
+    end
+end
+
+% takes an image (in HSV color form) and returns the modes returned by the fine to coarse segmentation algorithm in the form of signatures, where each mode is represented by a vector of the means and standard deviations of the cielab form of the mode
+function signatures = hsvFTC(im)
+    % select hues for histogram
+    hue_histogram_points = [];
+
+    for i = 1:size(im, 1)
+        for j = 1:size(im, 2)
+           hue_histogram_points = [histogram_points, hsv_im(i, j, 1)];
+        end
+    end
+
+    hue_hist = histogram(hue_histogram_points, unique(hue_histogram_points));   
+
+    hue_segments = fineToCoarseSegmentation(hue_hist);
+
+    loop_hue_hist_points = im;
+    loop_sat_hist_points = im;
+    master_color_points = im;
+
+    signatures = [];
+
+    % repeat FTC for saturation
+    for s = 1:(size(hue_segments) - 1)
+        sat_hist_points = [];
+        temp_hue_hist_points = hue_histogram_points;
+        for t = 1:size(loop_hue_hist_points, 1)
+            for u = 1:size(loop_hue_hist_points, 2)
+                if loop_hue_hist_points(t, u, 1) < hue_segments(s+1)
+                    sat_hist_points = [sat_hist_points, loop_hue_hist_points(t, u, 2)];
+                    temp_hue_hist_points = temp_hue_hist_points(temp_hue_hist_points ~= loop_hue_hist_points(t, u));
+                end
+            end
+        end
+        loop_hue_hist_points = temp_hue_hist_points;
+        sat_hist = histogram(sat_hist_points, unique(sat_hist_points));
+        sat_segments = fineToCoarseSegmentation(sat_hist);
+
+        % repeat FTC for value
+        for v = 1:(size(sat_segments) - 1)
+            val_hist_points = [];
+            temp_sat_hist_points = sat_hist_points;
+            for w = 1:size(loop_sat_hist_points, 1)
+                for x = 1:size(loop_sat_hist_points, 2)
+                    if loop_sat_hist_points(w, x, 2) < sat_segments(v+1)
+                        val_hist_points = [val_hist_points, loop_sat_hist_points(w, x, 3)];
+                        temp_sat_hist_points = temp_sat_hist_points(temp_sat_hist_points ~= loop_sat_hist_points(w, x));
+                    end
+                end
+            end
+            loop_sat_hist_points = temp_sat_hist_points;
+            val_hist = histogram(val_hist_points, unique(val_hist_points));
+            val_segments = fineToCoarseSegmentation(val_hist);
+
+            % find representative color modes and make signatures
+            for y = 1:(size(val_segments) - 1)
+                l_list = [];
+                a_list = [];
+                b_list = [];
+                temp_points = val_hist_points;
+                for z = 1:size(master_color_points, 1)
+                    for aa = 1:size(master_color_points, 2)
+                        if master_color_points(z, aa, 3) < sat_segments(y+1)
+                            lab_color = rgb2lab(hsv2rgb(master_color_points(z, aa)));
+                            l_list = [l_list, lab_color(1)];
+                            a_list = [a_list, lab_color(2)];
+                            b_list = [b_list, lab_color(3)];
+                            temp_points = temp_points(temp_points ~= master_color_points(z, aa));
+                        end
+                    end
+                end
+                master_color_points = temp_points;
+                signatures = [signatures; [mean(l_list), mean(a_list), mean(b_list), std(l_list), std(a_list), std(b_list)]];
+            end
+        end
+    end
 end
 
 function dst = restore_image(src, covar, max_diff, weight_diff, iterations)
@@ -417,5 +630,66 @@ function dst = restore_image(src, covar, max_diff, weight_diff, iterations)
     end
 
     dst = buffer(:,:,d);
+    
+end
+
+function image = stitchImage(labels)
+    % cell 1 of labels contains cell array for region of base image
+    % cell 2 of labels contains cell array of patch for new image
+    global totalWidth;
+    
+    image = zeros(totalWidth, totalWidth, 3);
+    for i = 1:size(labels) + 1
+       region = labels{i, 1};
+       patch = labels{i, 2};
+       image(region{X_OFFSET_INDEX}, region{Y_OFFSET_INDEX}) = patch{1};
+    end
+    
+end
+
+function image = applyEdgeBlend(image, labels)
+    % cell 1 of labels contains cell array for region of base image
+    % cell 2 of labels contains cell array of patch for new image
+    global totalWidth;
+    
+    for i = 1:size(labels) + 1
+       region = labels{i, 1};
+       
+       xOffset = region{X_OFFSET_INDEX};
+       yOffset = region{Y_OFFSET_INDEX};
+       width = region{WIDTH_INDEX};
+       
+       % if there's something to blur with above
+       if xOffset > 4 && totalWidth - xOffset > 4
+           x1 = xOffset - 4;
+           y1 = yOffset;
+           x2 = xOffset + 4;
+           y2 = yOffset + width;
+           
+           
+           blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredGreen = uint8(conv2(double(image(:, :, 2)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           
+           blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
+           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+       end
+       
+       % if there's something to blur with to the left
+       if yOffset > 4 && totalWidth - yOffset > 4
+           x1 = xOffset;
+           y1 = yOffset - 4;
+           x2 = xOffset + width;
+           y2 = yOffset + 4;
+           
+           
+           blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredGreen = uint8(conv2(double(image(:, :, 2)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           
+           blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
+           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+       end
+    end
     
 end
