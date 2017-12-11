@@ -166,7 +166,7 @@ end
 
 
 % at end of this method, should have cell array called labels which
-% contains in it's first cell the cell array describing the region in the
+% contains in its first cell the cell array describing the region in the
 % original image (includes all details from regions data structure - region
 % contents, center, width, and offset, and in its second cell a cell array
 % describing the patch in the style image (patch includes actual content of
