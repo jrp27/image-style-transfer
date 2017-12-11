@@ -353,11 +353,11 @@ function neighbors = computeKnn(patch, candidatePatches, K, width)
         end
     end
 end
+
 % comptes the whitepoint of an input image given in CIELAB form
 function whitepoint = computeWhitepoint(input_image)
     white_pixels = [];
     t = 0.3;
-    disp(input_image(1, 1,:));
     for k = 1:size(input_image, 1)
         for l = 1:size(input_image, 2)
            if (abs(input_image(k, l, 1)) + abs(input_image(k, l, 2)))/input_image(k, l, 3) < t
@@ -365,7 +365,6 @@ function whitepoint = computeWhitepoint(input_image)
            end
         end
     end    
-    disp(size(white_pixels));
     whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels), ...
         sum(white_pixels(:, 1, 2))/length(white_pixels), ...
         sum(white_pixels(:, 1, 3))/length(white_pixels)]; 
