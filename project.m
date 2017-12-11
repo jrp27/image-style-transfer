@@ -1,5 +1,7 @@
 style_image = imread('pointillism.jpg');
 base_image = imread('cat.jpg');
+global totalWidth;
+totalWidth = size(base_image, 1);
 
 % step 1: split and match
 min_width = 8^2;
@@ -117,7 +119,20 @@ end
 %   due to the difference between two neighbouring pixel values.
 % * iterations is the number of iterations to perform.
 
+
+
+
+% at end of this method, should have cell array called labels which
+% contains in it's first cell the cell array describing the region in the
+% original image (includes all details from regions data structure - region
+% contents, center, width, and offset, and in its second cell a cell array
+% describing the patch in the style image (patch includes actual content of
+% patch + center)
 %% step 3: bilinear blending
+
+image = stitchImage(labels);
+image = applyEdgeBlend(image);
+
 
 %% step 4: global color and contrast matching
 
@@ -517,5 +532,67 @@ function dst = restore_image(src, covar, max_diff, weight_diff, iterations)
     end
 
     dst = buffer(:,:,d);
+    
+end
+
+function image = stitchImage(labels)
+    % cell 1 of labels contains cell array for region of base image
+    % cell 2 of labels contains cell array of patch for new image
+    global totalWidth;
+    
+    image = zeros(totalWidth, totalWidth, 3);
+    for i = 1:size(labels) + 1
+       region = labels{i, 1};
+       patch = labels{i, 2};
+       image(region{X_OFFSET_INDEX}, region{Y_OFFSET_INDEX}) = patch{1};
+    end
+    
+end
+
+function blend = applyEdgeBlend(image, labels)
+    % cell 1 of labels contains cell array for region of base image
+    % cell 2 of labels contains cell array of patch for new image
+    global totalWidth;
+    
+    for i = 1:size(labels) + 1
+       region = labels{i, 1};
+       patch = labels{i, 2};
+       
+       xOffset = region{X_OFFSET_INDEX};
+       yOffset = region{Y_OFFSET_INDEX};
+       width = region{WIDTH_INDEX};
+       
+       % if there's something to blur with above
+       if xOffset > 4 && totalWidth - xOffset > 4
+           x1 = xOffset - 4;
+           y1 = yOffset;
+           x2 = xOffset + 4;
+           y2 = yOffset + width;
+           
+           
+           blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredGreen = uint8(conv2(double(image(:, :, 2)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           
+           blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
+           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+       end
+       
+       % if there's something to blur with to the left
+       if yOffset > 4 && totalWidth - yOffset > 4
+           x1 = xOffset;
+           y1 = yOffset - 4;
+           x2 = xOffset + width;
+           y2 = yOffset + 4;
+           
+           
+           blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredGreen = uint8(conv2(double(image(:, :, 2)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
+           
+           blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
+           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+       end
+    end
     
 end
