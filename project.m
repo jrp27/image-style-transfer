@@ -180,8 +180,8 @@ image = applyEdgeBlend(image);
 
 %% step 4: global color and contrast matching
 
-style_image = imread('pointillism.jpg');
-base_image = imread('cat.jpg');
+style_image = imread('watercolor.jpg');
+base_image = imread('kitten.jpg');
 
 % chromatic adaptation transform
 
@@ -200,8 +200,8 @@ lab_style = rgb2lab(style_image);
 lab_base = rgb2lab(base_image);
 
 whitepoint_style = computeWhitepoint(lab_style);
-
-lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
+xyz_wp_style = lab2xyz(whitepoint_style);
+lms_wp_style = m_cat02*[xyz_wp_style(1,1);xyz_wp_style(1,2);xyz_wp_style(1,3)];
 
 % 2.  Estimate similarly the white point of image I.
 % 3.  Perform the chromatic adaptation transform (CAT) on I to adapt its 
@@ -209,30 +209,35 @@ lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
 % 4.  Repeat Steps 2 and 3 until (a) the maximum number of iterations has 
 % been reached or; (b) the I white point has not changed from the previous 
 % iteration.
-itern_num = 0;
+iter_num = 0;
 max_iter = 30;
-new_whitepoint = [];
-old_whitepoint = [];
+new_whitepoint = [0, 0, 0];
+old_whitepoint = [0, 0, 0];
 input_im = lab_base;
 
-while iternum < max_iter
+while iter_num < max_iter
    old_whitepoint = new_whitepoint; 
    
    % step 2
    new_whitepoint = computeWhitepoint(input_im);
-   
-   lms_wp_input = m_cat02*lab2xyz(new_whitepoint);
+   xyz_wp_new = lab2xyz(new_whitepoint);
+   lms_wp_input = m_cat02*[xyz_wp_new(1,1);xyz_wp_new(1,2);xyz_wp_new(1,3)];
    
    % step 3 
-   transform = inv(m_cat02)*diag([lms_wp_style(1)/lms_wp_input(1), ...
-       lms_wp_style(2)/lms_wp_input(2), lms_wp_style(3)/lms_wp_input(3)])...
+   transform = inv(m_cat02)*diag([lms_wp_style(1,1)/lms_wp_input(1,1), ...
+       lms_wp_style(2,1)/lms_wp_input(2,1), lms_wp_style(3,1)/lms_wp_input(3,1)])...
        *m_cat02;
    
    xyz_input = lab2xyz(input_im);
-   new_im = [];
+   new_im = zeros(size(xyz_input, 1), size(xyz_input,2), 3);
    
-   for k = 1:length(xyz_input)
-       new_im = [new_im; transform*xyz_input(k)];
+   for k = 1:size(xyz_input, 1)
+       for l = 1:size(xyz_input, 2)
+           new_pix = transform*[xyz_input(k,l,1);xyz_input(k,l,2);xyz_input(k,l,3)];
+           new_im(k,l,1) = new_pix(1,1);
+           new_im(k,l,2) = new_pix(2,1);
+           new_im(k,l,3) = new_pix(3,1);
+       end
    end
    
    input_im = xyz2lab(new_im);
@@ -241,7 +246,7 @@ while iternum < max_iter
    if sum(new_whitepoint == old_whitepoint) == 3
        break;
    end
-   iternum = iternum + 1; 
+   iter_num = iter_num + 1; 
 end    
 
 % 5.  Return image Iâ€² which has the same geometry of I but with colors 
@@ -267,7 +272,7 @@ for i = 1:size(base_sigs, 1)
     for j = 1:size(style_sigs, 1)
         sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
-end    
+end       
 
 
 
@@ -361,8 +366,8 @@ function whitepoint = computeWhitepoint(input_image)
         end
     end    
     disp(size(white_pixels));
-    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels); ...
-        sum(white_pixels(:, 1, 2))/length(white_pixels); ...
+    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels), ...
+        sum(white_pixels(:, 1, 2))/length(white_pixels), ...
         sum(white_pixels(:, 1, 3))/length(white_pixels)]; 
 end
 
@@ -385,7 +390,7 @@ end
 
 function sections = fineToCoarseSegmentation(r)
     % calculate r_bar - Pool Adjacent Violators Algorithm
-    r_bar = histogram(histogram_points, unique(histogram_points));
+    r_bar = histogram(r.Data, unique(r.Data));
     edge = 2;
     map_to_new_bins = [1];
     n = 1;
