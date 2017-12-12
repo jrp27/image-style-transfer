@@ -1,12 +1,12 @@
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
-style_image = imread('watercolor.jpg');
-base_image = imread('kitten.jpg');
+style_image = imread('192pointillism.jpg');
+base_image = imread('person.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
 
 % step 1: split and match
-min_width = 2;
+min_width = 3;
 max_width = 256;
 omega = 15;
 K = 1;
