@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
 style_image = imread('smallpointillism.jpg');
