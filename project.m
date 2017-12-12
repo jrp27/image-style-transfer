@@ -1,7 +1,7 @@
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
 style_image = imread('watercolor.jpg');
-base_image = imread('kitten.jpg');
+base_image = imread('flowers.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
 
