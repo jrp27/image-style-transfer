@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
 style_image = imread('smallpointillism.jpg');
@@ -195,8 +196,8 @@ figure, imshow(image);
 
 %% step 4: global color and contrast matching
 
-style_image = imread('pointillism.jpg');
-base_image = imread('cat.jpg');
+style_image = imread('watercolor.jpg');
+base_image = imread('kitten.jpg');
 
 % chromatic adaptation transform
 
@@ -215,8 +216,8 @@ lab_style = rgb2lab(style_image);
 lab_base = rgb2lab(base_image);
 
 whitepoint_style = computeWhitepoint(lab_style);
-
-lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
+xyz_wp_style = lab2xyz(whitepoint_style);
+lms_wp_style = m_cat02*[xyz_wp_style(1,1);xyz_wp_style(1,2);xyz_wp_style(1,3)];
 
 % 2.  Estimate similarly the white point of image I.
 % 3.  Perform the chromatic adaptation transform (CAT) on I to adapt its 
@@ -224,30 +225,35 @@ lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
 % 4.  Repeat Steps 2 and 3 until (a) the maximum number of iterations has 
 % been reached or; (b) the I white point has not changed from the previous 
 % iteration.
-itern_num = 0;
+iter_num = 0;
 max_iter = 30;
-new_whitepoint = [];
-old_whitepoint = [];
+new_whitepoint = [0, 0, 0];
+old_whitepoint = [0, 0, 0];
 input_im = lab_base;
 
-while iternum < max_iter
+while iter_num < max_iter
    old_whitepoint = new_whitepoint; 
    
    % step 2
    new_whitepoint = computeWhitepoint(input_im);
-   
-   lms_wp_input = m_cat02*lab2xyz(new_whitepoint);
+   xyz_wp_new = lab2xyz(new_whitepoint);
+   lms_wp_input = m_cat02*[xyz_wp_new(1,1);xyz_wp_new(1,2);xyz_wp_new(1,3)];
    
    % step 3 
-   transform = inv(m_cat02)*diag([lms_wp_style(1)/lms_wp_input(1), ...
-       lms_wp_style(2)/lms_wp_input(2), lms_wp_style(3)/lms_wp_input(3)])...
+   transform = inv(m_cat02)*diag([lms_wp_style(1,1)/lms_wp_input(1,1), ...
+       lms_wp_style(2,1)/lms_wp_input(2,1), lms_wp_style(3,1)/lms_wp_input(3,1)])...
        *m_cat02;
    
    xyz_input = lab2xyz(input_im);
-   new_im = [];
+   new_im = zeros(size(xyz_input, 1), size(xyz_input,2), 3);
    
-   for k = 1:length(xyz_input)
-       new_im = [new_im; transform*xyz_input(k)];
+   for k = 1:size(xyz_input, 1)
+       for l = 1:size(xyz_input, 2)
+           new_pix = transform*[xyz_input(k,l,1);xyz_input(k,l,2);xyz_input(k,l,3)];
+           new_im(k,l,1) = new_pix(1,1);
+           new_im(k,l,2) = new_pix(2,1);
+           new_im(k,l,3) = new_pix(3,1);
+       end
    end
    
    input_im = xyz2lab(new_im);
@@ -256,13 +262,13 @@ while iternum < max_iter
    if sum(new_whitepoint == old_whitepoint) == 3
        break;
    end
-   iternum = iternum + 1; 
+   iter_num = iter_num + 1; 
 end    
 
 % 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
 
-imshow(input_im);
+imshow(lab2uint8(input_im));
 
 % color chroma transfer
 
@@ -283,6 +289,7 @@ for i = 1:size(base_sigs, 1)
         sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
 end    
+   
 
 
 
@@ -367,7 +374,6 @@ end
 function whitepoint = computeWhitepoint(input_image)
     white_pixels = [];
     t = 0.3;
-    disp(input_image(1, 1,:));
     for k = 1:size(input_image, 1)
         for l = 1:size(input_image, 2)
            if (abs(input_image(k, l, 1)) + abs(input_image(k, l, 2)))/input_image(k, l, 3) < t
@@ -375,9 +381,8 @@ function whitepoint = computeWhitepoint(input_image)
            end
         end
     end    
-    disp(size(white_pixels));
-    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels); ...
-        sum(white_pixels(:, 1, 2))/length(white_pixels); ...
+    whitepoint = [sum(white_pixels(:, 1, 1))/length(white_pixels), ...
+        sum(white_pixels(:, 1, 2))/length(white_pixels), ...
         sum(white_pixels(:, 1, 3))/length(white_pixels)]; 
 end
 
@@ -398,19 +403,19 @@ function meaningful = isMeaningful(h, lower_bound, upper_bound)
     meaningful = H > meaningful_threshold;
 end
 
-function sections = fineToCoarseSegmentation(r)
+function S = fineToCoarseSegmentation(r)
     % calculate r_bar - Pool Adjacent Violators Algorithm
-    r_bar = histogram(histogram_points, unique(histogram_points));
+    %r_bar = histogram(r.Data, unique(r.Data));
     edge = 2;
     map_to_new_bins = [1];
     n = 1;
     new_bin_edges = [r.BinEdges(1)];
-    new_bin_count = [r.BinCount(1)];
+    new_bin_count = [r.BinCounts(1)];
 
-    for m = 2:size(r.BinCount)
+    for m = 2:size(r.BinCounts)
         n = n+1;
         new_bin_edges(n) = r.BinEdges(m);
-        new_bin_count(n) = r.BinCount(m);
+        new_bin_count(n) = r.BinCounts(m);
         while (n > 1 && new_bin_count(n) < new_bin_count(n-1))
             new_bin_edges(n) = [];
             new_bin_count(n-1) = new_bin_count(n-1) + new_bin_count(n);
@@ -419,12 +424,11 @@ function sections = fineToCoarseSegmentation(r)
         end
     end
 
-    r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
-    r_bar.BinCount = new_bin_count;       
+    %r_bar.BinEdges = [new_bin_edges, r.BinEdges(end)];
+    %r_bar.BinCount = new_bin_count;       
 
     % step 1 of FTC: find local minima
-
-    [loc_mins, min_indices] = findpeaks(-1*histogram_points);
+    [loc_mins, min_indices] = findpeaks(-1*(r.Data));
     % Initialize S={s0,…,sn} as the finest segmentation of the histogram, i.e., the list of all the local minima, plus the endpoints s0=1 and sn=L.
     S = [0 + min_indices + 1];
 
@@ -442,11 +446,11 @@ function sections = fineToCoarseSegmentation(r)
             % find c between s-1 and s+o
             c = 0;
             for k = S(i-1)+r.BinWidth:r.BinWidth:S(i+o)-r.BinWidth
-                r_ac = sum(r.BinCount(i-1:k));
-                r_bar_ac = sum(r.BinCount(S(i-1):S(k)));
+                r_ac = sum(r.BinCounts(i-1:k));
+                r_bar_ac = sum(r.BinCounts(S(i-1):S(k)));
                 if ((r_ac >= r_bar_ac) && (not (isMeaningful(r, i-1, k))))
-                    r_cb = sum(r.BinCount(k:i+o-1));
-                    r_bar_cb = sum(r.BinCount(S(k):S(i+o-1)));
+                    r_cb = sum(r.BinCounts(k:i+o-1));
+                    r_bar_cb = sum(r.BinCounts(S(k):S(i+o-1)));
                     if ((r_cb <= r_bar_cb) && (not (isMeaningful(r, k, i+1))))
                         c = k;
                         % remove all sections beyond i-1
@@ -498,11 +502,10 @@ function signatures = hsvFTC(im)
            hue_histogram_points = [hue_histogram_points, im(i, j, 1)];
         end
     end
-
     hue_hist = histogram(hue_histogram_points, unique(hue_histogram_points));   
-
+    
     hue_segments = fineToCoarseSegmentation(hue_hist);
-
+        
     loop_hue_hist_points = im;
     loop_sat_hist_points = im;
     master_color_points = im;
@@ -510,55 +513,46 @@ function signatures = hsvFTC(im)
     signatures = [];
 
     % repeat FTC for saturation
-    for s = 1:(size(hue_segments) - 1)
+    for s = 1:(size(hue_segments,2) - 1)
         sat_hist_points = [];
-        temp_hue_hist_points = hue_histogram_points;
         for t = 1:size(loop_hue_hist_points, 1)
             for u = 1:size(loop_hue_hist_points, 2)
-                if loop_hue_hist_points(t, u, 1) < hue_segments(s+1)
+                if loop_hue_hist_points(t, u, 1) < hue_segments(1,s+1)
                     sat_hist_points = [sat_hist_points, loop_hue_hist_points(t, u, 2)];
-                    temp_hue_hist_points = temp_hue_hist_points(temp_hue_hist_points ~= loop_hue_hist_points(t, u));
                 end
             end
         end
-        loop_hue_hist_points = temp_hue_hist_points;
         sat_hist = histogram(sat_hist_points, unique(sat_hist_points));
         sat_segments = fineToCoarseSegmentation(sat_hist);
 
         % repeat FTC for value
-        for v = 1:(size(sat_segments) - 1)
+        for v = 1:(size(sat_segments,2) - 1)
             val_hist_points = [];
-            temp_sat_hist_points = sat_hist_points;
             for w = 1:size(loop_sat_hist_points, 1)
                 for x = 1:size(loop_sat_hist_points, 2)
-                    if loop_sat_hist_points(w, x, 2) < sat_segments(v+1)
+                    if loop_sat_hist_points(w, x, 1) < hue_segments(1,s+1) && loop_sat_hist_points(w, x, 2) < sat_segments(1,v+1)
                         val_hist_points = [val_hist_points, loop_sat_hist_points(w, x, 3)];
-                        temp_sat_hist_points = temp_sat_hist_points(temp_sat_hist_points ~= loop_sat_hist_points(w, x));
                     end
                 end
             end
-            loop_sat_hist_points = temp_sat_hist_points;
             val_hist = histogram(val_hist_points, unique(val_hist_points));
             val_segments = fineToCoarseSegmentation(val_hist);
 
             % find representative color modes and make signatures
-            for y = 1:(size(val_segments) - 1)
+            for y = 1:(size(val_segments,2) - 1)
                 l_list = [];
                 a_list = [];
                 b_list = [];
-                temp_points = val_hist_points;
                 for z = 1:size(master_color_points, 1)
                     for aa = 1:size(master_color_points, 2)
-                        if master_color_points(z, aa, 3) < sat_segments(y+1)
-                            lab_color = rgb2lab(hsv2rgb(master_color_points(z, aa)));
+                        if  master_color_points(z, aa, 1) < hue_segments(1,s+1) && master_color_points(z, aa, 2) < sat_segments(1,v+1) && master_color_points(z, aa, 3) < val_segments(1,y+1)
+                            lab_color = rgb2lab(hsv2rgb([master_color_points(z, aa, 1), master_color_points(z, aa, 2), master_color_points(z, aa, 3)]));
                             l_list = [l_list, lab_color(1)];
                             a_list = [a_list, lab_color(2)];
                             b_list = [b_list, lab_color(3)];
-                            temp_points = temp_points(temp_points ~= master_color_points(z, aa));
                         end
                     end
                 end
-                master_color_points = temp_points;
                 signatures = [signatures; [mean(l_list), mean(a_list), mean(b_list), std(l_list), std(a_list), std(b_list)]];
             end
         end
@@ -726,3 +720,6 @@ end
 function image = totalBlend(image, howBlur)
     image = imgaussfilt(image, howBlur);
 end
+
+
+
