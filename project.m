@@ -1,156 +1,156 @@
-% requires base_image to be a square and style_image to be equal to or
-% larger in size than base_image along both dimensions
-style_image = imread('watercolor.jpg');
-base_image = imread('kitten.jpg');
-
-% step 1: split and match
-min_width = 8;
-max_width = 256;
-omega = 15;
-K = 4;
-
-% regions is cell array where each row contains: patch, xOffset, yOffset, xCenter, yCenter, width;
-regions = {base_image, 1, 1, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)};
-global PATCH_INDEX;
-PATCH_INDEX = 1;
-global X_OFFSET_INDEX;
-X_OFFSET_INDEX = 2;
-global Y_OFFSET_INDEX;
-Y_OFFSET_INDEX = 3;
-global X_CENTER_INDEX;
-X_CENTER_INDEX = 4;
-global Y_CENTER_INDEX;
-Y_CENTER_INDEX = 5;
-global WIDTH_INDEX;
-WIDTH_INDEX = 6;
-
-% candidate labels is cell array where each row has 2 entries: index into
-% regions for corresponding region, cell array containing: style 
-% patch, distance b/w region patch and style patch, centerX of style patch,
-% centerY of style patch
-candidateLabels = {};
-
-index = 1;
-done = false;
-
-while not(done)
-    % R_i
-     patch = regions{index, PATCH_INDEX};
-     width = regions{index, WIDTH_INDEX};
-     % x_i <- center of R_i
-     center = [regions{index, X_CENTER_INDEX}, regions{index, Y_CENTER_INDEX}];
-     % sigma_i <- sqrt(var(p^u_xi))
-     varianceablePatch = double(patch);
-     sigma_i = sqrt(var(varianceablePatch(:)));
-     
-     % Compute y_i = arg_y min d[p^u_xi, p^v_y]
-     [ds, newPatches] = computeArg(regions, index, style_image);
-     minD = min(ds);
-     minD = minD(1);
-     newPatchIndex = find(ds==minD);
-     y_i = newPatches(newPatchIndex);
-     
-     % if C(p^u_x, p^v_y) is true
-     if ((sigma_i + minD > omega) && (width > min_width)) || (width > max_width)
-         % Split R_i into four
-         % R = {R \ R_i} U {R_m+1, ..., R_m+4}
-         
-         % make room for new rows
-         if index < size(regions, 1)
-            numToShift = size(regions, 1) - index - 1;
-            regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
-         end
-         
-         newPatch1 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
-         newWidth = width/2;
-         newXOffset1 = regions{index, X_OFFSET_INDEX};
-         newYOffset1 = regions{index, Y_OFFSET_INDEX};
-         newXCenter1 = newXOffset1 + newWidth/2;
-         newYCenter1 = newYOffset1 + newWidth/2;
-         regions{index+1, PATCH_INDEX} = newPatch1;
-         regions{index+1, X_OFFSET_INDEX} = newXOffset1;
-         regions{index+1, Y_OFFSET_INDEX} = newYOffset1;
-         regions{index+1, X_CENTER_INDEX} = newXCenter1;
-         regions{index+1, Y_CENTER_INDEX} = newYCenter1;
-         regions{index+1, WIDTH_INDEX} = newWidth;
-         
-         newPatch2 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
-         newXOffset2 = regions{index, X_OFFSET_INDEX} + width/2;
-         newYOffset2 = regions{index, Y_OFFSET_INDEX};
-         newXCenter2 = newXOffset2 + newWidth/2;
-         newYCenter2 = newYOffset2 + newWidth/2;
-         regions{index+2, PATCH_INDEX} = newPatch2;
-         regions{index+2, X_OFFSET_INDEX} = newXOffset2;
-         regions{index+2, Y_OFFSET_INDEX} = newYOffset2;
-         regions{index+2, X_CENTER_INDEX} = newXCenter2;
-         regions{index+2, Y_CENTER_INDEX} = newYCenter2;
-         regions{index+2, WIDTH_INDEX} = newWidth;
-         
-         newPatch3 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
-         newXOffset3 = regions{index, X_OFFSET_INDEX};
-         newYOffset3 = regions{index, Y_OFFSET_INDEX} + width/2;
-         newXCenter3 = newXOffset3 + newWidth/2;
-         newYCenter3 = newYOffset3 + newWidth/2;
-         regions{index+3, PATCH_INDEX} = newPatch3;
-         regions{index+3, X_OFFSET_INDEX} = newXOffset3;
-         regions{index+3, Y_OFFSET_INDEX} = newYOffset3;
-         regions{index+3, X_CENTER_INDEX} = newXCenter3;
-         regions{index+3, Y_CENTER_INDEX} = newYCenter3;
-         regions{index+3, WIDTH_INDEX} = newWidth;
-         
-         newPatch4 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
-         newXOffset4 = regions{index, X_OFFSET_INDEX} + width/2;
-         newYOffset4 = regions{index, Y_OFFSET_INDEX} + width/2;
-         newXCenter4 = newXOffset4 + newWidth/2;
-         newYCenter4 = newYOffset4 + newWidth/2;
-         regions{index+4, PATCH_INDEX} = newPatch4;
-         regions{index+4, X_OFFSET_INDEX} = newXOffset4;
-         regions{index+4, Y_OFFSET_INDEX} = newYOffset4;
-         regions{index+4, X_CENTER_INDEX} = newXCenter4;
-         regions{index+4, Y_CENTER_INDEX} = newYCenter4;
-         regions{index+4, WIDTH_INDEX} = newWidth;
-         
-         % remove original patch that we split
-         regions(index, :) = [];
-         
-     else
-         % Compute spatially-constrained k-NN:
-         % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
-         % labels are the centers of the patches
-         % Compute k-NN over the patches of the style_image at different
-         % centers
-         % X = width/2
-         candidatePatches = {};
-         patchesIndex = 1;
-         for i = 1:size(style_image, 1) - width
-             for j = 1:size(style_image, 2) - width
-                 newPatch = style_image(i:i+width-1, j:j+width-1, :);
-                 candidatePatches{patchesIndex, 1} = newPatch;
-                 candidatePatches{patchesIndex, 2} = i+width/2;
-                 candidatePatches{patchesIndex, 3} = j+width/2;
-                 patchesIndex = patchesIndex + 1;
-             end
-         end
-         
-         % need to include the spatial constraint
-         neighborResults = computeKnn(patch, candidatePatches, K, width);
-         candidateLabelIndex = size(candidateLabels, 1) + 1;
-         candidateLabels{candidateLabelIndex, 1} = index;
-         candidateLabels{candidateLabelIndex, 2} = neighborResults;
-         
-         
-         
-         if index < size(regions,1)
-            index = index + 1;
-         else
-             done = true;
-         end
-     
-     end
-end
-
-% at this point you have regions (R in paper) and candidateLabels (L in
-% paper) to work with for the rest of the steps
+% % requires base_image to be a square and style_image to be equal to or
+% % larger in size than base_image along both dimensions
+% style_image = imread('watercolor.jpg');
+% base_image = imread('kitten.jpg');
+% 
+% % step 1: split and match
+% min_width = 8;
+% max_width = 256;
+% omega = 15;
+% K = 4;
+% 
+% % regions is cell array where each row contains: patch, xOffset, yOffset, xCenter, yCenter, width;
+% regions = {base_image, 1, 1, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)};
+% global PATCH_INDEX;
+% PATCH_INDEX = 1;
+% global X_OFFSET_INDEX;
+% X_OFFSET_INDEX = 2;
+% global Y_OFFSET_INDEX;
+% Y_OFFSET_INDEX = 3;
+% global X_CENTER_INDEX;
+% X_CENTER_INDEX = 4;
+% global Y_CENTER_INDEX;
+% Y_CENTER_INDEX = 5;
+% global WIDTH_INDEX;
+% WIDTH_INDEX = 6;
+% 
+% % candidate labels is cell array where each row has 2 entries: index into
+% % regions for corresponding region, cell array containing: style 
+% % patch, distance b/w region patch and style patch, centerX of style patch,
+% % centerY of style patch
+% candidateLabels = {};
+% 
+% index = 1;
+% done = false;
+% 
+% while not(done)
+%     % R_i
+%      patch = regions{index, PATCH_INDEX};
+%      width = regions{index, WIDTH_INDEX};
+%      % x_i <- center of R_i
+%      center = [regions{index, X_CENTER_INDEX}, regions{index, Y_CENTER_INDEX}];
+%      % sigma_i <- sqrt(var(p^u_xi))
+%      varianceablePatch = double(patch);
+%      sigma_i = sqrt(var(varianceablePatch(:)));
+%      
+%      % Compute y_i = arg_y min d[p^u_xi, p^v_y]
+%      [ds, newPatches] = computeArg(regions, index, style_image);
+%      minD = min(ds);
+%      minD = minD(1);
+%      newPatchIndex = find(ds==minD);
+%      y_i = newPatches(newPatchIndex);
+%      
+%      % if C(p^u_x, p^v_y) is true
+%      if ((sigma_i + minD > omega) && (width > min_width)) || (width > max_width)
+%          % Split R_i into four
+%          % R = {R \ R_i} U {R_m+1, ..., R_m+4}
+%          
+%          % make room for new rows
+%          if index < size(regions, 1)
+%             numToShift = size(regions, 1) - index - 1;
+%             regions(index+5:index+5+numToShift, :) = regions(index + 1:index+1+numToShift, :);
+%          end
+%          
+%          newPatch1 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
+%          newWidth = width/2;
+%          newXOffset1 = regions{index, X_OFFSET_INDEX};
+%          newYOffset1 = regions{index, Y_OFFSET_INDEX};
+%          newXCenter1 = newXOffset1 + newWidth/2;
+%          newYCenter1 = newYOffset1 + newWidth/2;
+%          regions{index+1, PATCH_INDEX} = newPatch1;
+%          regions{index+1, X_OFFSET_INDEX} = newXOffset1;
+%          regions{index+1, Y_OFFSET_INDEX} = newYOffset1;
+%          regions{index+1, X_CENTER_INDEX} = newXCenter1;
+%          regions{index+1, Y_CENTER_INDEX} = newYCenter1;
+%          regions{index+1, WIDTH_INDEX} = newWidth;
+%          
+%          newPatch2 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}:regions{index,Y_OFFSET_INDEX}+width/2-1, :);
+%          newXOffset2 = regions{index, X_OFFSET_INDEX} + width/2;
+%          newYOffset2 = regions{index, Y_OFFSET_INDEX};
+%          newXCenter2 = newXOffset2 + newWidth/2;
+%          newYCenter2 = newYOffset2 + newWidth/2;
+%          regions{index+2, PATCH_INDEX} = newPatch2;
+%          regions{index+2, X_OFFSET_INDEX} = newXOffset2;
+%          regions{index+2, Y_OFFSET_INDEX} = newYOffset2;
+%          regions{index+2, X_CENTER_INDEX} = newXCenter2;
+%          regions{index+2, Y_CENTER_INDEX} = newYCenter2;
+%          regions{index+2, WIDTH_INDEX} = newWidth;
+%          
+%          newPatch3 = base_image(regions{index,X_OFFSET_INDEX}:regions{index,X_OFFSET_INDEX}+width/2-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
+%          newXOffset3 = regions{index, X_OFFSET_INDEX};
+%          newYOffset3 = regions{index, Y_OFFSET_INDEX} + width/2;
+%          newXCenter3 = newXOffset3 + newWidth/2;
+%          newYCenter3 = newYOffset3 + newWidth/2;
+%          regions{index+3, PATCH_INDEX} = newPatch3;
+%          regions{index+3, X_OFFSET_INDEX} = newXOffset3;
+%          regions{index+3, Y_OFFSET_INDEX} = newYOffset3;
+%          regions{index+3, X_CENTER_INDEX} = newXCenter3;
+%          regions{index+3, Y_CENTER_INDEX} = newYCenter3;
+%          regions{index+3, WIDTH_INDEX} = newWidth;
+%          
+%          newPatch4 = base_image(regions{index,X_OFFSET_INDEX}+width/2:regions{index,X_OFFSET_INDEX}+width-1, regions{index,Y_OFFSET_INDEX}+width/2:regions{index,Y_OFFSET_INDEX}+width-1, :);
+%          newXOffset4 = regions{index, X_OFFSET_INDEX} + width/2;
+%          newYOffset4 = regions{index, Y_OFFSET_INDEX} + width/2;
+%          newXCenter4 = newXOffset4 + newWidth/2;
+%          newYCenter4 = newYOffset4 + newWidth/2;
+%          regions{index+4, PATCH_INDEX} = newPatch4;
+%          regions{index+4, X_OFFSET_INDEX} = newXOffset4;
+%          regions{index+4, Y_OFFSET_INDEX} = newYOffset4;
+%          regions{index+4, X_CENTER_INDEX} = newXCenter4;
+%          regions{index+4, Y_CENTER_INDEX} = newYCenter4;
+%          regions{index+4, WIDTH_INDEX} = newWidth;
+%          
+%          % remove original patch that we split
+%          regions(index, :) = [];
+%          
+%      else
+%          % Compute spatially-constrained k-NN:
+%          % L_i <- {l_ik}^K_k=1 with |l_ik - l_ik+1| > X
+%          % labels are the centers of the patches
+%          % Compute k-NN over the patches of the style_image at different
+%          % centers
+%          % X = width/2
+%          candidatePatches = {};
+%          patchesIndex = 1;
+%          for i = 1:size(style_image, 1) - width
+%              for j = 1:size(style_image, 2) - width
+%                  newPatch = style_image(i:i+width-1, j:j+width-1, :);
+%                  candidatePatches{patchesIndex, 1} = newPatch;
+%                  candidatePatches{patchesIndex, 2} = i+width/2;
+%                  candidatePatches{patchesIndex, 3} = j+width/2;
+%                  patchesIndex = patchesIndex + 1;
+%              end
+%          end
+%          
+%          % need to include the spatial constraint
+%          neighborResults = computeKnn(patch, candidatePatches, K, width);
+%          candidateLabelIndex = size(candidateLabels, 1) + 1;
+%          candidateLabels{candidateLabelIndex, 1} = index;
+%          candidateLabels{candidateLabelIndex, 2} = neighborResults;
+%          
+%          
+%          
+%          if index < size(regions,1)
+%             index = index + 1;
+%          else
+%              done = true;
+%          end
+%      
+%      end
+% end
+% 
+% % at this point you have regions (R in paper) and candidateLabels (L in
+% % paper) to work with for the rest of the steps
 
 %% step 2: optimization
 
@@ -173,8 +173,8 @@ end
 % patch + center)
 %% step 3: bilinear blending
 
-image = stitchImage(labels);
-image = applyEdgeBlend(image);
+%image = stitchImage(labels);
+%image = applyEdgeBlend(image);
 % image = totalBlend(image, .1);
 
 
@@ -251,6 +251,8 @@ end
 
 % 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
+
+imshow(lab2uint8(input_im));
 
 % color chroma transfer
 
@@ -410,8 +412,7 @@ function S = fineToCoarseSegmentation(r)
     %r_bar.BinCount = new_bin_count;       
 
     % step 1 of FTC: find local minima
-
-    [loc_mins, min_indices] = findpeaks(-1*r.Data);
+    [loc_mins, min_indices] = findpeaks(-1*(r.Data));
     % Initialize S={s0,…,sn} as the finest segmentation of the histogram, i.e., the list of all the local minima, plus the endpoints s0=1 and sn=L.
     S = [0 + min_indices + 1];
 
@@ -478,14 +479,13 @@ end
 % takes an image (in HSV color form) and returns the modes returned by the fine to coarse segmentation algorithm in the form of signatures, where each mode is represented by a vector of the means and standard deviations of the cielab form of the mode
 function signatures = hsvFTC(im)
     % select hues for histogram
-    hue_histogram_points = zeros(size(im, 1), size(im, 2), 1);
+    hue_histogram_points = [];
 
     for i = 1:size(im, 1)
         for j = 1:size(im, 2)
-           hue_histogram_points(i, j, 1) = im(i, j, 1);
+           hue_histogram_points = [hue_histogram_points, im(i, j, 1)];
         end
     end
-
     hue_hist = histogram(hue_histogram_points, unique(hue_histogram_points));   
     
     hue_segments = fineToCoarseSegmentation(hue_hist);
@@ -493,39 +493,32 @@ function signatures = hsvFTC(im)
     loop_hue_hist_points = im;
     loop_sat_hist_points = im;
     master_color_points = im;
-    disp(size(master_color_points));
 
     signatures = [];
 
     % repeat FTC for saturation
     for s = 1:(size(hue_segments,2) - 1)
         sat_hist_points = [];
-        temp_hue_hist_points = loop_hue_hist_points;
         for t = 1:size(loop_hue_hist_points, 1)
             for u = 1:size(loop_hue_hist_points, 2)
                 if loop_hue_hist_points(t, u, 1) < hue_segments(1,s+1)
                     sat_hist_points = [sat_hist_points, loop_hue_hist_points(t, u, 2)];
-                    temp_hue_hist_points = temp_hue_hist_points(temp_hue_hist_points ~= loop_hue_hist_points(t, u));
                 end
             end
         end
-        loop_hue_hist_points = temp_hue_hist_points;
         sat_hist = histogram(sat_hist_points, unique(sat_hist_points));
         sat_segments = fineToCoarseSegmentation(sat_hist);
 
         % repeat FTC for value
         for v = 1:(size(sat_segments,2) - 1)
             val_hist_points = [];
-            temp_sat_hist_points = loop_sat_hist_points;
             for w = 1:size(loop_sat_hist_points, 1)
                 for x = 1:size(loop_sat_hist_points, 2)
                     if loop_sat_hist_points(w, x, 1) < hue_segments(1,s+1) && loop_sat_hist_points(w, x, 2) < sat_segments(1,v+1)
                         val_hist_points = [val_hist_points, loop_sat_hist_points(w, x, 3)];
-                        temp_sat_hist_points = temp_sat_hist_points(temp_sat_hist_points ~= loop_sat_hist_points(w, x));
                     end
                 end
             end
-            loop_sat_hist_points = temp_sat_hist_points;
             val_hist = histogram(val_hist_points, unique(val_hist_points));
             val_segments = fineToCoarseSegmentation(val_hist);
 
@@ -534,20 +527,16 @@ function signatures = hsvFTC(im)
                 l_list = [];
                 a_list = [];
                 b_list = [];
-                temp_points = master_color_points;
                 for z = 1:size(master_color_points, 1)
                     for aa = 1:size(master_color_points, 2)
                         if  master_color_points(z, aa, 1) < hue_segments(1,s+1) && master_color_points(z, aa, 2) < sat_segments(1,v+1) && master_color_points(z, aa, 3) < val_segments(1,y+1)
-                            disp(size(master_color_points(z, aa)));
-                            lab_color = rgb2lab(hsv2rgb([master_color_points(z, aa, 1); master_color_points(z, aa, 2); master_color_points(z, aa, 3)]));
+                            lab_color = rgb2lab(hsv2rgb([master_color_points(z, aa, 1), master_color_points(z, aa, 2), master_color_points(z, aa, 3)]));
                             l_list = [l_list, lab_color(1)];
                             a_list = [a_list, lab_color(2)];
                             b_list = [b_list, lab_color(3)];
-                            temp_points = temp_points(temp_points ~= master_color_points(z, aa));
                         end
                     end
                 end
-                master_color_points = temp_points;
                 signatures = [signatures; [mean(l_list), mean(a_list), mean(b_list), std(l_list), std(a_list), std(b_list)]];
             end
         end
