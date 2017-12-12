@@ -1,6 +1,6 @@
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
-style_image = imread('smallpointillism.jpg');
+style_image = imread('smallfacepointillism.png');
 base_image = imread('kitten.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
@@ -188,14 +188,15 @@ end
 
 image = stitchImage(labels);
 figure, imshow(image);
-image = applyEdgeBlend(image, labels);
-figure, imshow(image);
-% image = totalBlend(image, .1);
+imageBlur1 = applyEdgeBlend(image, labels);
+figure, imshow(imageBlur1);
+imageBlur2 = totalBlend(image, .7);
+figure, imshow(imageBlur2);
 
 
 %% step 4: global color and contrast matching
 
-style_image = imread('watercolor.jpg');
+style_image = imread('w.jpg');
 base_image = imread('kitten.jpg');
 
 % chromatic adaptation transform
@@ -681,11 +682,11 @@ function image = applyEdgeBlend(image, labels)
        yOffset = region{Y_OFFSET_INDEX};
        width = region{WIDTH_INDEX};
        
-       % if there's something to blur with above
-       if xOffset > 4 && (totalWidth - xOffset) > 4
-           x1 = xOffset - 4;
+       % if there's something to blur with to the left and right
+       if xOffset > 2 && (totalWidth - xOffset - width) > 2 && (yOffset + width) <= totalWidth && yOffset > 1
+           x1 = xOffset - 2;
            y1 = yOffset;
-           x2 = xOffset + 4;
+           x2 = xOffset + 2;
            y2 = yOffset + width;
            
            
@@ -697,12 +698,12 @@ function image = applyEdgeBlend(image, labels)
            image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
        end
        
-       % if there's something to blur with to the left
-       if yOffset > 4 && (totalWidth - yOffset) > 4
+       % if there's something to blur with above and below
+       if yOffset > 2 && (totalWidth - yOffset) > 2 && (xOffset + width) <= totalWidth && xOffset > 1
            x1 = xOffset;
-           y1 = yOffset - 4;
+           y1 = yOffset - 2;
            x2 = xOffset + width;
-           y2 = yOffset + 4;
+           y2 = yOffset + 2;
            
            
            blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
@@ -710,7 +711,9 @@ function image = applyEdgeBlend(image, labels)
            blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
            
            blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
-           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+           image(x1:x2, y1:y2, 1) = blurred(x1:x2, y1:y2, 1);
+           image(x1:x2, y1:y2, 2) = blurred(x1:x2, y1:y2, 2);
+           image(x1:x2, y1:y2, 3) = blurred(x1:x2, y1:y2, 3);
        end
     end
     

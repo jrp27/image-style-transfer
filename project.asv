@@ -1,7 +1,6 @@
-<<<<<<< HEAD
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
-style_image = imread('smallpointillism.jpg');
+style_image = imread('smallfacepointillism.png');
 base_image = imread('kitten.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
@@ -189,15 +188,15 @@ end
 
 image = stitchImage(labels);
 figure, imshow(image);
-image = applyEdgeBlend(image, labels);
+imageblu = applyEdgeBlend(image, labels);
 figure, imshow(image);
 % image = totalBlend(image, .1);
 
 
 %% step 4: global color and contrast matching
 
-style_image = imread('pointillism.jpg');
-base_image = imread('cat.jpg');
+style_image = imread('w.jpg');
+base_image = imread('kitten.jpg');
 
 % chromatic adaptation transform
 
@@ -216,8 +215,8 @@ lab_style = rgb2lab(style_image);
 lab_base = rgb2lab(base_image);
 
 whitepoint_style = computeWhitepoint(lab_style);
-
-lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
+xyz_wp_style = lab2xyz(whitepoint_style);
+lms_wp_style = m_cat02*[xyz_wp_style(1,1);xyz_wp_style(1,2);xyz_wp_style(1,3)];
 
 % 2.  Estimate similarly the white point of image I.
 % 3.  Perform the chromatic adaptation transform (CAT) on I to adapt its 
@@ -225,30 +224,35 @@ lms_wp_style = m_cat02*lab2xyz(whitepoint_style);
 % 4.  Repeat Steps 2 and 3 until (a) the maximum number of iterations has 
 % been reached or; (b) the I white point has not changed from the previous 
 % iteration.
-itern_num = 0;
+iter_num = 0;
 max_iter = 30;
-new_whitepoint = [];
-old_whitepoint = [];
+new_whitepoint = [0, 0, 0];
+old_whitepoint = [0, 0, 0];
 input_im = lab_base;
 
-while iternum < max_iter
+while iter_num < max_iter
    old_whitepoint = new_whitepoint; 
    
    % step 2
    new_whitepoint = computeWhitepoint(input_im);
-   
-   lms_wp_input = m_cat02*lab2xyz(new_whitepoint);
+   xyz_wp_new = lab2xyz(new_whitepoint);
+   lms_wp_input = m_cat02*[xyz_wp_new(1,1);xyz_wp_new(1,2);xyz_wp_new(1,3)];
    
    % step 3 
-   transform = inv(m_cat02)*diag([lms_wp_style(1)/lms_wp_input(1), ...
-       lms_wp_style(2)/lms_wp_input(2), lms_wp_style(3)/lms_wp_input(3)])...
+   transform = inv(m_cat02)*diag([lms_wp_style(1,1)/lms_wp_input(1,1), ...
+       lms_wp_style(2,1)/lms_wp_input(2,1), lms_wp_style(3,1)/lms_wp_input(3,1)])...
        *m_cat02;
    
    xyz_input = lab2xyz(input_im);
-   new_im = [];
+   new_im = zeros(size(xyz_input, 1), size(xyz_input,2), 3);
    
-   for k = 1:length(xyz_input)
-       new_im = [new_im; transform*xyz_input(k)];
+   for k = 1:size(xyz_input, 1)
+       for l = 1:size(xyz_input, 2)
+           new_pix = transform*[xyz_input(k,l,1);xyz_input(k,l,2);xyz_input(k,l,3)];
+           new_im(k,l,1) = new_pix(1,1);
+           new_im(k,l,2) = new_pix(2,1);
+           new_im(k,l,3) = new_pix(3,1);
+       end
    end
    
    input_im = xyz2lab(new_im);
@@ -257,13 +261,13 @@ while iternum < max_iter
    if sum(new_whitepoint == old_whitepoint) == 3
        break;
    end
-   iternum = iternum + 1; 
+   iter_num = iter_num + 1; 
 end    
 
 % 5.  Return image Iâ€² which has the same geometry of I but with colors 
 % adapted to the illuminant of E.
 
-imshow(input_im);
+imshow(lab2uint8(input_im));
 
 % color chroma transfer
 
@@ -284,6 +288,7 @@ for i = 1:size(base_sigs, 1)
         sig_dist_matrix(i,j) = norm(base_sigs(i,1:3) - style_sigs(j,1:3)) + norm(base_sigs(i,4:6) - style_sigs(j,4:6));
     end
 end    
+   
 
 
 
@@ -677,10 +682,10 @@ function image = applyEdgeBlend(image, labels)
        width = region{WIDTH_INDEX};
        
        % if there's something to blur with above
-       if xOffset > 4 && (totalWidth - xOffset) > 4
-           x1 = xOffset - 4;
+       if xOffset >= 2 && (totalWidth - xOffset - width) >= 2 && (yOffset + width) <= totalWidth
+           x1 = xOffset - 2;
            y1 = yOffset;
-           x2 = xOffset + 4;
+           x2 = xOffset + 2;
            y2 = yOffset + width;
            
            
@@ -693,11 +698,11 @@ function image = applyEdgeBlend(image, labels)
        end
        
        % if there's something to blur with to the left
-       if yOffset > 4 && (totalWidth - yOffset) > 4
+       if yOffset >= 2 && (totalWidth - yOffset) >= 2 && (xOffset + width) <= totalWidth
            x1 = xOffset;
-           y1 = yOffset - 4;
+           y1 = yOffset - 2;
            x2 = xOffset + width;
-           y2 = yOffset + 4;
+           y2 = yOffset + 2;
            
            
            blurredRed = uint8(conv2(double(image(:, :, 1)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
@@ -705,7 +710,9 @@ function image = applyEdgeBlend(image, labels)
            blurredBlue = uint8(conv2(double(image(:, :, 3)), [0,1,0;1,0,1;0,1,0]/4, 'same'));
            
            blurred = cat(3, blurredRed, blurredGreen, blurredBlue);
-           image(x1:x2, y1:y2) = blurred(x1:x2, y1:y2);
+           image(x1:x2, y1:y2, 1) = blurred(x1:x2, y1:y2, 1);
+           image(x1:x2, y1:y2, 2) = blurred(x1:x2, y1:y2, 2);
+           image(x1:x2, y1:y2, 3) = blurred(x1:x2, y1:y2, 3);
        end
     end
     
@@ -714,8 +721,6 @@ end
 function image = totalBlend(image, howBlur)
     image = imgaussfilt(image, howBlur);
 end
-=======
-
 
 
 
