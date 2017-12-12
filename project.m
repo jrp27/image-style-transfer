@@ -2,12 +2,14 @@
 % larger in size than base_image along both dimensions
 style_image = imread('watercolor.jpg');
 base_image = imread('kitten.jpg');
+global totalWidth;
+totalWidth = size(base_image, 1);
 
 % step 1: split and match
 min_width = 8;
 max_width = 256;
 omega = 15;
-K = 4;
+K = 1;
 
 % regions is cell array where each row contains: patch, xOffset, yOffset, xCenter, yCenter, width;
 regions = {base_image, 1, 1, size(base_image, 1)/2, size(base_image, 2)/2, size(base_image,1)};
@@ -164,6 +166,17 @@ end
 
 
 
+% this janky code only works when K = 1. It entirely skips optimization
+labels = {};
+for i = 1:size(candidateLabels, 1)
+    labels{i, 1} = regions(candidateLabels{i, 1}, :);
+    candidateSet = candidateLabels{i, 2};
+    % replace patch with original region to see if it looks normal
+%     candidateSet{1, 1} = regions{candidateLabels{i, 1}, 1};
+    labels{i, 2} = candidateSet(1, :);
+end
+
+
 
 % at end of this method, should have cell array called labels which
 % contains in its first cell the cell array describing the region in the
@@ -174,7 +187,9 @@ end
 %% step 3: bilinear blending
 
 image = stitchImage(labels);
-image = applyEdgeBlend(image);
+figure, imshow(image);
+image = applyEdgeBlend(image, labels);
+figure, imshow(image);
 % image = totalBlend(image, .1);
 
 
@@ -632,12 +647,28 @@ function image = stitchImage(labels)
     % cell 1 of labels contains cell array for region of base image
     % cell 2 of labels contains cell array of patch for new image
     global totalWidth;
+    global X_OFFSET_INDEX;
+    global Y_OFFSET_INDEX;
+    global WIDTH_INDEX;
     
-    image = zeros(totalWidth, totalWidth, 3);
-    for i = 1:size(labels) + 1
+    image = zeros(totalWidth, totalWidth, 3, 'uint8');
+    for i = 1:size(labels)
        region = labels{i, 1};
        patch = labels{i, 2};
-       image(region{X_OFFSET_INDEX}, region{Y_OFFSET_INDEX}) = patch{1};
+       xOff = region{X_OFFSET_INDEX};
+       yOff = region{Y_OFFSET_INDEX};
+       patchWidth = region{WIDTH_INDEX};
+       applyPatch = patch{1};
+       for j = 1:size(applyPatch, 1)
+           for k = 1:size(applyPatch, 2)
+               image(xOff+j-1, yOff+k-1, 1) = applyPatch(j, k, 1);
+               image(xOff+j-1, yOff+k-1, 2) = applyPatch(j, k, 2);
+               image(xOff+j-1, yOff+k-1, 3) = applyPatch(j, k, 3);
+           end
+       end
+%        image(xOff:xOff+patchWidth-1, yOff:yOff+patchWidth-1, 1) = applyPatch(:, :, 1);
+%        image(xOff:xOff+patchWidth-1, yOff:yOff+patchWidth-1, 2) = applyPatch(:, :, 2);
+%        image(xOff:xOff+patchWidth-1, yOff:yOff+patchWidth-1, 3) = applyPatch(:, :, 3);
     end
     
 end
@@ -646,8 +677,11 @@ function image = applyEdgeBlend(image, labels)
     % cell 1 of labels contains cell array for region of base image
     % cell 2 of labels contains cell array of patch for new image
     global totalWidth;
+    global X_OFFSET_INDEX;
+    global Y_OFFSET_INDEX;
+    global WIDTH_INDEX;
     
-    for i = 1:size(labels) + 1
+    for i = 1:size(labels)
        region = labels{i, 1};
        
        xOffset = region{X_OFFSET_INDEX};
@@ -655,7 +689,7 @@ function image = applyEdgeBlend(image, labels)
        width = region{WIDTH_INDEX};
        
        % if there's something to blur with above
-       if xOffset > 4 && totalWidth - xOffset > 4
+       if xOffset > 4 && (totalWidth - xOffset) > 4
            x1 = xOffset - 4;
            y1 = yOffset;
            x2 = xOffset + 4;
@@ -671,7 +705,7 @@ function image = applyEdgeBlend(image, labels)
        end
        
        % if there's something to blur with to the left
-       if yOffset > 4 && totalWidth - yOffset > 4
+       if yOffset > 4 && (totalWidth - yOffset) > 4
            x1 = xOffset;
            y1 = yOffset - 4;
            x2 = xOffset + width;
