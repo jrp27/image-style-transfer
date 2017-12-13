@@ -1,7 +1,7 @@
 % requires base_image to be a square and style_image to be equal to or
 % larger in size than base_image along both dimensions
-style_image = imread('192pointillism.jpg');
-base_image = imread('person.jpg');
+style_image = imread('starry192.jpg');
+base_image = imread('192skyline.jpg');
 global totalWidth;
 totalWidth = size(base_image, 1);
 
