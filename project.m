@@ -6,7 +6,7 @@ global totalWidth;
 totalWidth = size(base_image, 1);
 
 % step 1: split and match
-min_width = 3;
+min_width = 8;
 max_width = 256;
 omega = 15;
 K = 1;
